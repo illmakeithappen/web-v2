@@ -140,6 +140,32 @@ const UserIcon = styled(Link)`
   }
 `;
 
+const SignInButton = styled(Link)`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  background: #002FA7;
+  color: white;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 47, 167, 0.3);
+    background: #0039CE;
+  }
+
+  @media (max-width: 768px) {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+  }
+`;
+
 const MenuButton = styled.button`
   display: none;
   background: none;
@@ -253,16 +279,15 @@ function Header() {
                 {item.label}
               </NavLink>
             ))}
-            {!isAuthenticated && (
-              <NavLink to="/auth">
-                Sign In
-              </NavLink>
-            )}
           </NavLinks>
-          {isAuthenticated && (
+          {isAuthenticated ? (
             <UserIcon to="/profile" title={`${getUserName()} - View Profile`}>
               {getUserInitial()}
             </UserIcon>
+          ) : (
+            <SignInButton to="/auth">
+              Sign In
+            </SignInButton>
           )}
           <MenuButton
             $open={menuOpen}
