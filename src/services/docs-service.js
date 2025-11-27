@@ -90,13 +90,43 @@ class DocsService {
    * @returns {Promise<{file: Object, content: string}>}
    */
   async getDocFile(section, docId, filePath) {
-    const response = await fetch(
-      `${this.baseUrl}/${section}/${docId}/files/${encodeURIComponent(filePath)}`
-    );
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    if (this.useApi) {
+      try {
+        const response = await fetch(
+          `${this.baseUrl}/${section}/${docId}/files/${encodeURIComponent(filePath)}`
+        );
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return await response.json();
+      } catch (error) {
+        console.warn(`API unavailable for ${section}/${docId}/${filePath}, falling back to static:`, error.message);
+        return this._staticDocFileFallback(section, docId, filePath);
+      }
     }
-    return await response.json();
+    return this._staticDocFileFallback(section, docId, filePath);
+  }
+
+  /**
+   * Static fallback for subdirectory file
+   * @private
+   */
+  async _staticDocFileFallback(section, docId, filePath) {
+    const staticPath = `/content/${section}/${docId}/${filePath}`;
+    const response = await fetch(staticPath);
+    if (!response.ok) {
+      throw new Error(`Static file not found: ${staticPath}`);
+    }
+    const content = await response.text();
+    return {
+      file: {
+        name: filePath.split('/').pop(),
+        path: filePath,
+        size: content.length,
+        is_directory: false
+      },
+      content
+    };
   }
 
   /**

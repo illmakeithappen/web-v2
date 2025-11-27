@@ -51,13 +51,13 @@ const TabIcon = styled.span`
 `;
 
 const TabLabel = styled.span`
+  flex: 1;
   white-space: nowrap;
 `;
 
 const TabCount = styled.span`
   font-size: ${carbonTypography.fontSize.caption01};
   color: ${carbonColors.text03};
-  margin-left: ${carbonSpacing.spacing02};
 `;
 
 const SectionTabBar = ({
