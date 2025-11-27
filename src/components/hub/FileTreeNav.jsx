@@ -362,57 +362,99 @@ export default function FileTreeNav({
 
 
       <FileTreeContent>
-        {/* Expanded list (shown when no item is selected for workflows/skills/mcp/subagents) */}
-        {['workflows', 'skills', 'mcp', 'subagents'].includes(selectedSection) && !activeTab ? (
-          <ExpandedWorkflowContainer>
-            <WorkflowSearchInput
-              type="text"
-              placeholder={`Search ${sectionLabels[selectedSection]}s...`}
-              value={
-                selectedSection === 'workflows' ? workflowSearchQuery :
-                selectedSection === 'skills' ? skillSearchQuery :
-                selectedSection === 'mcp' ? mcpSearchQuery :
-                subagentSearchQuery
-              }
-              onChange={(e) => {
-                if (selectedSection === 'workflows') setWorkflowSearchQuery(e.target.value);
-                else if (selectedSection === 'skills') setSkillSearchQuery(e.target.value);
-                else if (selectedSection === 'mcp') setMcpSearchQuery(e.target.value);
-                else setSubagentSearchQuery(e.target.value);
-              }}
-              autoFocus
-            />
-            <WorkflowScrollList>
-              {(() => {
-                const items = selectedSection === 'workflows' ? availableWorkflows
-                  : selectedSection === 'skills' ? availableSkills
-                  : selectedSection === 'mcp' ? availableMcp
-                  : availableSubagents;
-                const searchQuery = selectedSection === 'workflows' ? workflowSearchQuery
-                  : selectedSection === 'skills' ? skillSearchQuery
-                  : selectedSection === 'mcp' ? mcpSearchQuery
-                  : subagentSearchQuery;
-                const filteredItems = items.filter(item =>
-                  item.name.toLowerCase().includes(searchQuery.toLowerCase())
-                );
-                if (filteredItems.length === 0) {
-                  return <NoResultsText>No {sectionLabels[selectedSection]}s found</NoResultsText>;
-                }
-                return filteredItems.map(item => {
-                  const dateStr = selectedSection === 'workflows' ? formatWorkflowDate(item.id) : null;
+        {/* Show list when no item selected, show single selected item when one is active */}
+        {['workflows', 'skills', 'mcp', 'subagents'].includes(selectedSection) ? (
+          activeTab ? (
+            // Show only the selected workflow item
+            <ExpandedWorkflowContainer>
+              <WorkflowScrollList>
+                {(() => {
+                  const items = selectedSection === 'workflows' ? availableWorkflows
+                    : selectedSection === 'skills' ? availableSkills
+                    : selectedSection === 'mcp' ? availableMcp
+                    : availableSubagents;
+                  const selectedItem = items.find(item => item.id === activeTab);
+                  if (!selectedItem) return null;
+
+                  const dateStr = selectedSection === 'workflows' ? formatWorkflowDate(selectedItem.id) : null;
                   return (
-                    <WorkflowListItem
-                      key={item.id}
-                      onClick={() => onItemSelectFromList(item.id)}
-                    >
-                      {dateStr && <WorkflowDate>{dateStr}</WorkflowDate>}
-                      <WorkflowTitle>{item.name}</WorkflowTitle>
-                    </WorkflowListItem>
+                    <>
+                      <WorkflowListItem
+                        key="back"
+                        onClick={() => onSectionChange(selectedSection, null)}
+                        style={{
+                          background: 'rgba(0, 0, 0, 0.03)',
+                          color: '#666',
+                          fontStyle: 'italic',
+                          borderBottom: '1px solid rgba(0, 0, 0, 0.15)'
+                        }}
+                      >
+                        <WorkflowTitle>← All {sectionLabels[selectedSection]}s</WorkflowTitle>
+                      </WorkflowListItem>
+                      <WorkflowListItem
+                        key={selectedItem.id}
+                        style={{ background: 'rgba(255, 165, 0, 0.15)' }}
+                      >
+                        {dateStr && <WorkflowDate>{dateStr}</WorkflowDate>}
+                        <WorkflowTitle>{selectedItem.name}</WorkflowTitle>
+                      </WorkflowListItem>
+                    </>
                   );
-                });
-              })()}
-            </WorkflowScrollList>
-          </ExpandedWorkflowContainer>
+                })()}
+              </WorkflowScrollList>
+            </ExpandedWorkflowContainer>
+          ) : (
+            // Show full searchable list when no item selected
+            <ExpandedWorkflowContainer>
+              <WorkflowSearchInput
+                type="text"
+                placeholder={`Search ${sectionLabels[selectedSection]}s...`}
+                value={
+                  selectedSection === 'workflows' ? workflowSearchQuery :
+                  selectedSection === 'skills' ? skillSearchQuery :
+                  selectedSection === 'mcp' ? mcpSearchQuery :
+                  subagentSearchQuery
+                }
+                onChange={(e) => {
+                  if (selectedSection === 'workflows') setWorkflowSearchQuery(e.target.value);
+                  else if (selectedSection === 'skills') setSkillSearchQuery(e.target.value);
+                  else if (selectedSection === 'mcp') setMcpSearchQuery(e.target.value);
+                  else setSubagentSearchQuery(e.target.value);
+                }}
+                autoFocus
+              />
+              <WorkflowScrollList>
+                {(() => {
+                  const items = selectedSection === 'workflows' ? availableWorkflows
+                    : selectedSection === 'skills' ? availableSkills
+                    : selectedSection === 'mcp' ? availableMcp
+                    : availableSubagents;
+                  const searchQuery = selectedSection === 'workflows' ? workflowSearchQuery
+                    : selectedSection === 'skills' ? skillSearchQuery
+                    : selectedSection === 'mcp' ? mcpSearchQuery
+                    : subagentSearchQuery;
+                  const filteredItems = items.filter(item =>
+                    item.name.toLowerCase().includes(searchQuery.toLowerCase())
+                  );
+                  if (filteredItems.length === 0) {
+                    return <NoResultsText>No {sectionLabels[selectedSection]}s found</NoResultsText>;
+                  }
+                  return filteredItems.map(item => {
+                    const dateStr = selectedSection === 'workflows' ? formatWorkflowDate(item.id) : null;
+                    return (
+                      <WorkflowListItem
+                        key={item.id}
+                        onClick={() => onItemSelectFromList(item.id)}
+                      >
+                        {dateStr && <WorkflowDate>{dateStr}</WorkflowDate>}
+                        <WorkflowTitle>{item.name}</WorkflowTitle>
+                      </WorkflowListItem>
+                    );
+                  });
+                })()}
+              </WorkflowScrollList>
+            </ExpandedWorkflowContainer>
+          )
         ) : (
           <FileTreeScrollableArea>
             {/* README section - show static sub-items */}

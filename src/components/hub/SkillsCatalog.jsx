@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import styled from 'styled-components';
-import axios from 'axios';
 import { carbonColors, carbonSpacing } from '../../styles/carbonTheme';
 import CarbonTable from '../carbon/CarbonTable';
 import CarbonToolbar from '../carbon/CarbonToolbar';
@@ -8,6 +7,8 @@ import CarbonPagination from '../carbon/CarbonPagination';
 import CarbonButton from '../carbon/CarbonButton';
 import InlineFilterBar from '../carbon/InlineFilterBar';
 import { DifficultyBadge } from '../carbon/CarbonTag';
+import { fetchSkills } from '../../services/template-service';
+import { useAuth } from '../../contexts/AuthContext';
 
 // ============================================================================
 // STYLED COMPONENTS
@@ -334,26 +335,24 @@ export default function SkillsCatalog({
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  // Fetch skills from API
-  const fetchSkills = async () => {
+  // Get user from auth context
+  const { user } = useAuth();
+
+  // Fetch skills from Supabase
+  const loadSkills = async () => {
     try {
       setLoading(true);
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      const response = await axios.get(`${backendUrl}/api/v1/skills`, {
-        params: {
-          limit: 100 // Get all skills
-        }
-      });
+      const response = await fetchSkills(user?.id, { limit: 100 });
 
-      if (response.data.success) {
-        setSkills(response.data.skills);
-        console.log('Loaded skills:', response.data.skills.length);
+      if (response.success) {
+        setSkills(response.skills);
+        console.log('Loaded skills from Supabase:', response.skills.length);
       } else {
         setError('Failed to load skills');
       }
     } catch (err) {
       console.error('Error fetching skills:', err);
-      setError('Failed to load skills from server');
+      setError('Failed to load skills from database');
       setSkills([]);
     } finally {
       setLoading(false);
@@ -362,8 +361,8 @@ export default function SkillsCatalog({
 
   // Fetch on mount
   useEffect(() => {
-    fetchSkills();
-  }, []);
+    loadSkills();
+  }, [user?.id]);
 
   // Apply filters, search, and sorting
   const filteredAndSortedSkills = useMemo(() => {

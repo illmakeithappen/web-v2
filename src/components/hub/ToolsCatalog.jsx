@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import styled from 'styled-components';
-import axios from 'axios';
 import { carbonColors, carbonSpacing } from '../../styles/carbonTheme';
 import { TOOL_CATEGORIES } from '../../data/tools';
 import CarbonTable from '../carbon/CarbonTable';
@@ -8,8 +7,8 @@ import CarbonToolbar from '../carbon/CarbonToolbar';
 import CarbonPagination from '../carbon/CarbonPagination';
 import CarbonButton from '../carbon/CarbonButton';
 import InlineFilterBar from '../carbon/InlineFilterBar';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+import { fetchMcpServers } from '../../services/template-service';
+import { useAuth } from '../../contexts/AuthContext';
 
 // ============================================================================
 // STYLED COMPONENTS
@@ -332,25 +331,29 @@ export default function ToolsCatalog({
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  // Fetch tools from API
+  // Get user from auth context
+  const { user } = useAuth();
+
+  // Fetch MCP servers from Supabase
   useEffect(() => {
-    const fetchTools = async () => {
+    const loadMcpServers = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(`${API_BASE_URL}/tools`);
-        if (response.data.success) {
-          setTools(response.data.tools);
+        const response = await fetchMcpServers(user?.id, { limit: 100 });
+        if (response.success) {
+          setTools(response.mcp_servers);
+          console.log('Loaded MCP servers from Supabase:', response.mcp_servers.length);
         }
       } catch (error) {
-        console.error('Error fetching tools:', error);
+        console.error('Error fetching MCP servers:', error);
         setTools([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchTools();
-  }, []);
+    loadMcpServers();
+  }, [user?.id]);
 
   // Apply filters, search, and sorting
   const filteredAndSortedTools = useMemo(() => {

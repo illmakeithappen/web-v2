@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import styled from 'styled-components';
-import docsService from '../../services/docs-service';
 import { carbonColors, carbonSpacing } from '../../styles/carbonTheme';
 import CarbonTable from '../carbon/CarbonTable';
 import CarbonToolbar from '../carbon/CarbonToolbar';
@@ -8,6 +7,8 @@ import CarbonPagination from '../carbon/CarbonPagination';
 import CarbonButton from '../carbon/CarbonButton';
 import InlineFilterBar from '../carbon/InlineFilterBar';
 import { DifficultyBadge } from '../carbon/CarbonTag';
+import { fetchWorkflows } from '../../services/template-service';
+import { useAuth } from '../../contexts/AuthContext';
 
 // ============================================================================
 // STYLED COMPONENTS
@@ -285,7 +286,7 @@ const getTableColumns = (handleDownloadSkills, handleUploadSkills, openManageMen
     header: 'Action',
     width: '90px',
     align: 'center',
-    render: (_, row, index, { onCourseSelect, onWorkflowView, onWorkflowEdit }) => (
+    render: (_, row, index, { onWorkflowSelect, onWorkflowView, onWorkflowEdit }) => (
       <ActionButtonGroup>
         <ManageMenuContainer className="manage-menu-container">
           <CarbonButton
@@ -293,12 +294,12 @@ const getTableColumns = (handleDownloadSkills, handleUploadSkills, openManageMen
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              setOpenManageMenu(openManageMenu === row.course_id ? null : row.course_id);
+              setOpenManageMenu(openManageMenu === row.workflow_id ? null : row.workflow_id);
             }}
           >
             Manage
           </CarbonButton>
-          {openManageMenu === row.course_id && (
+          {openManageMenu === row.workflow_id && (
             <ManageDropdown>
               <MenuOption
                 onClick={(e) => {
@@ -340,14 +341,14 @@ const getTableColumns = (handleDownloadSkills, handleUploadSkills, openManageMen
 // FILTER GROUPS CONFIGURATION
 // ============================================================================
 
-const getFilterGroups = (courses) => {
-  // Count courses per filter option
+const getFilterGroups = (workflows) => {
+  // Count workflows per filter option
   const typeCounts = {};
   const difficultyCounts = {};
 
-  courses.forEach(course => {
-    typeCounts[course.type] = (typeCounts[course.type] || 0) + 1;
-    difficultyCounts[course.difficulty] = (difficultyCounts[course.difficulty] || 0) + 1;
+  workflows.forEach(workflow => {
+    typeCounts[workflow.type] = (typeCounts[workflow.type] || 0) + 1;
+    difficultyCounts[workflow.difficulty] = (difficultyCounts[workflow.difficulty] || 0) + 1;
   });
 
   return [
@@ -376,20 +377,20 @@ const getFilterGroups = (courses) => {
 // WORKFLOW CATALOG COMPONENT
 // ============================================================================
 
-export default function CourseCatalog({
-  onCourseSelect,
-  onCoursePreview,
+export default function WorkflowCatalog({
+  onWorkflowSelect,
+  onWorkflowPreview,
   onWorkflowView,
   onWorkflowEdit,
   viewMode = 'table',
   onViewModeChange,
   onDetailView,
-  selectedCourseId,
+  selectedWorkflowId,
   activeTab,
   onTabChange
 }) {
   // State management
-  const [courses, setCourses] = useState([]);
+  const [workflows, setWorkflows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -412,7 +413,7 @@ export default function CourseCatalog({
 
       // Transform from docs format to display format
       const transformedItems = (data.items || []).map(item => ({
-        course_id: item.id,
+        workflow_id: item.id,
         title: item.name,
         description: item.description || '',
         type: item.category || section,
@@ -425,44 +426,54 @@ export default function CourseCatalog({
         status: item.status || 'active'
       }));
 
-      setCourses(transformedItems);
+      setWorkflows(transformedItems);
       console.log(`Loaded ${section} via docs-service:`, transformedItems.length);
     } catch (err) {
       console.error(`Error fetching ${section}:`, err);
       setError(`Failed to load ${section}`);
-      setCourses([]);
+      setWorkflows([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch workflows from vault-web/workflows directory via docs-service
-  const fetchWorkflows = async () => {
+  // Get user from auth context
+  const { user } = useAuth();
+
+  // Fetch workflows from Supabase
+  const loadWorkflows = async () => {
     try {
       setLoading(true);
-      const data = await docsService.listSection('workflows');
+      const response = await fetchWorkflows(user?.id, { limit: 100 });
 
-      // Transform from docs format to workflow format
-      const transformedWorkflows = (data.items || []).map(item => ({
-        course_id: item.id,
-        title: item.name,
-        description: item.description || '',
-        type: item.category || 'workflow',
-        difficulty: item.difficulty || 'intermediate',
-        duration: item.estimated_time || 'Not specified',
-        agent: item.agent || 'Claude Code',
-        tags: item.tags || [],
-        created: item.created_date,
-        steps: item.steps || [],
-        status: item.status || 'active'
-      }));
+      if (response.success) {
+        // Transform Supabase format to match expected workflow format
+        const transformedWorkflows = response.workflows.map((workflow) => ({
+          workflow_id: workflow.id,
+          title: workflow.name,
+          description: workflow.description || '',
+          type: workflow.category || 'workflow',
+          difficulty: workflow.metadata?.difficulty || workflow.tags?.find(t => ['beginner', 'intermediate', 'advanced'].includes(t)) || 'intermediate',
+          duration: workflow.metadata?.estimated_time || 'Not specified',
+          agent: workflow.metadata?.agent || 'Claude Code',
+          tags: workflow.tags || [],
+          created: workflow.metadata?.created_date || workflow.created_at,
+          steps: workflow.nodes || [],
+          status: workflow.metadata?.status || 'active',
+          is_template: workflow.is_template,
+          content_path: workflow.metadata?.content_path
+        }));
 
-      setCourses(transformedWorkflows);
-      console.log('Loaded workflows via docs-service:', transformedWorkflows.length);
+        setWorkflows(transformedWorkflows);
+        console.log('Loaded workflows from Supabase:', transformedWorkflows.length);
+      } else {
+        setError('Failed to load workflows');
+        setWorkflows([]);
+      }
     } catch (err) {
       console.error('Error fetching workflows:', err);
-      setError('Failed to load workflows');
-      setCourses([]);
+      setError('Failed to load workflows from database');
+      setWorkflows([]);
     } finally {
       setLoading(false);
     }
@@ -473,7 +484,7 @@ export default function CourseCatalog({
     try {
       // Create download data
       const downloadData = {
-        workflow_id: workflow.course_id,
+        workflow_id: workflow.workflow_id,
         workflow_title: workflow.title,
         skills: workflow.skills || [],
         tools: workflow.tools || [],
@@ -488,7 +499,7 @@ export default function CourseCatalog({
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${workflow.course_id}_skills_tools.json`;
+      link.download = `${workflow.workflow_id}_skills_tools.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -557,47 +568,47 @@ export default function CourseCatalog({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openManageMenu]);
 
-  // Fetch data based on active tab - all via docs-service
+  // Fetch data based on active tab
   useEffect(() => {
     if (activeTab === 'workflows') {
-      fetchWorkflows();
+      loadWorkflows();
     } else if (activeTab === 'skills') {
       fetchSection('skills');
     } else if (activeTab === 'tools') {
       fetchSection('tools');
     } else if (activeTab === 'projects') {
       // Projects tab - show empty for now (no docs section for projects)
-      setCourses([]);
+      setWorkflows([]);
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, user?.id]);
 
   // Apply filters, search, and sorting
-  const filteredAndSortedCourses = useMemo(() => {
-    let coursesData = [...courses];
+  const filteredAndSortedWorkflows = useMemo(() => {
+    let workflowsData = [...workflows];
 
     // Apply filters
     Object.entries(selectedFilters).forEach(([key, values]) => {
       if (values && values.length > 0) {
-        coursesData = coursesData.filter(course => values.includes(course[key]));
+        workflowsData = workflowsData.filter(workflow => values.includes(workflow[key]));
       }
     });
 
     // Apply search
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      coursesData = coursesData.filter(course =>
-        course.title?.toLowerCase().includes(query) ||
-        course.description?.toLowerCase().includes(query) ||
-        course.agent?.toLowerCase().includes(query) ||
-        course.tags?.some(tag => tag.toLowerCase().includes(query))
+      workflowsData = workflowsData.filter(workflow =>
+        workflow.title?.toLowerCase().includes(query) ||
+        workflow.description?.toLowerCase().includes(query) ||
+        workflow.agent?.toLowerCase().includes(query) ||
+        workflow.tags?.some(tag => tag.toLowerCase().includes(query))
       );
     }
 
     // Apply sorting
     if (sortConfig.key && sortConfig.direction) {
-      coursesData.sort((a, b) => {
+      workflowsData.sort((a, b) => {
         const aVal = a[sortConfig.key];
         const bVal = b[sortConfig.key];
 
@@ -614,16 +625,16 @@ export default function CourseCatalog({
       });
     }
 
-    return coursesData;
-  }, [courses, searchQuery, selectedFilters, sortConfig]);
+    return workflowsData;
+  }, [workflows, searchQuery, selectedFilters, sortConfig]);
 
   // Pagination
-  const totalPages = Math.ceil(filteredAndSortedCourses.length / itemsPerPage);
-  const paginatedCourses = useMemo(() => {
+  const totalPages = Math.ceil(filteredAndSortedWorkflows.length / itemsPerPage);
+  const paginatedWorkflows = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
-    return filteredAndSortedCourses.slice(startIndex, endIndex);
-  }, [filteredAndSortedCourses, currentPage, itemsPerPage]);
+    return filteredAndSortedWorkflows.slice(startIndex, endIndex);
+  }, [filteredAndSortedWorkflows, currentPage, itemsPerPage]);
 
   // Generate active filter chips
   const activeFilterChips = useMemo(() => {
@@ -683,7 +694,7 @@ export default function CourseCatalog({
 
   const handleSelectAll = (checked) => {
     if (checked) {
-      setSelectedRows(new Set(paginatedCourses.map((_, index) => index)));
+      setSelectedRows(new Set(paginatedWorkflows.map((_, index) => index)));
     } else {
       setSelectedRows(new Set());
     }
@@ -691,8 +702,8 @@ export default function CourseCatalog({
 
   const handleRowClick = (rowData) => {
     // Show workflow preview when row is clicked
-    if (onCoursePreview) {
-      onCoursePreview(rowData);
+    if (onWorkflowPreview) {
+      onWorkflowPreview(rowData);
     }
   };
 
@@ -701,16 +712,16 @@ export default function CourseCatalog({
     {
       label: 'Export Selected',
       onClick: () => {
-        const selectedCourses = Array.from(selectedRows).map(index => paginatedCourses[index]);
-        console.log('Export:', selectedCourses);
+        const selectedWorkflows = Array.from(selectedRows).map(index => paginatedWorkflows[index]);
+        console.log('Export:', selectedWorkflows);
         // TODO: Implement export functionality
       },
     },
     {
       label: 'Compare',
       onClick: () => {
-        const selectedCourses = Array.from(selectedRows).map(index => paginatedCourses[index]);
-        console.log('Compare:', selectedCourses);
+        const selectedWorkflows = Array.from(selectedRows).map(index => paginatedWorkflows[index]);
+        console.log('Compare:', selectedWorkflows);
         // TODO: Implement compare functionality
       },
       disabled: selectedRows.size < 2,
@@ -718,7 +729,7 @@ export default function CourseCatalog({
   ];
 
   const columns = getTableColumns(handleDownloadSkills, handleUploadSkills, openManageMenu, setOpenManageMenu);
-  const filterGroups = getFilterGroups(courses);
+  const filterGroups = getFilterGroups(workflows);
 
   // Show loading state
   if (loading) {
@@ -763,7 +774,7 @@ export default function CourseCatalog({
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder="Search workflows..."
-        itemCount={filteredAndSortedCourses.length}
+        itemCount={filteredAndSortedWorkflows.length}
         itemLabel="workflows"
         showItemCount={false}
         activeFilters={activeFilterChips}
@@ -816,16 +827,16 @@ export default function CourseCatalog({
         <CarbonTable
           columns={columns.map(col => ({
             ...col,
-            render: col.render ? (value, row, index) => col.render(value, row, index, { onCourseSelect, onWorkflowView, onWorkflowEdit }) : undefined,
+            render: col.render ? (value, row, index) => col.render(value, row, index, { onWorkflowSelect, onWorkflowView, onWorkflowEdit }) : undefined,
           }))}
-          data={paginatedCourses}
+          data={paginatedWorkflows}
           selectable={false}
           expandable={false}
           sortConfig={sortConfig}
           onSort={setSortConfig}
           onRowClick={handleRowClick}
           density={density}
-          highlightedRowId={selectedCourseId}
+          highlightedRowId={selectedWorkflowId}
           emptyState={{
             title: 'No workflows found',
             description: searchQuery
@@ -836,12 +847,12 @@ export default function CourseCatalog({
       </TableSection>
 
       {/* Pagination */}
-      {filteredAndSortedCourses.length > 0 && (
+      {filteredAndSortedWorkflows.length > 0 && (
         <CarbonPagination
           currentPage={currentPage}
           totalPages={totalPages}
           itemsPerPage={itemsPerPage}
-          totalItems={filteredAndSortedCourses.length}
+          totalItems={filteredAndSortedWorkflows.length}
           onPageChange={setCurrentPage}
           onItemsPerPageChange={(newItemsPerPage) => {
             setItemsPerPage(newItemsPerPage);

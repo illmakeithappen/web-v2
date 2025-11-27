@@ -301,7 +301,7 @@ const WorkflowPreviewModal = ({
   const handleDownloadSkills = () => {
     try {
       const downloadData = {
-        workflow_id: workflow.course_id,
+        workflow_id: workflow.workflow_id,
         workflow_title: workflow.title,
         skills: workflow.skills || [],
         tools: workflow.tools || [],
@@ -313,7 +313,7 @@ const WorkflowPreviewModal = ({
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${workflow.course_id}_skills_tools.json`;
+      link.download = `${workflow.workflow_id}_skills_tools.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

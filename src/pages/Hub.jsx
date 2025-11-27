@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useSearchParams } from 'react-router-dom';
 import docsService from '../services/docs-service';
+import { fetchWorkflowById } from '../services/template-service';
 import { carbonColors, carbonSpacing, carbonTypography } from '../styles/carbonTheme';
-import CourseCatalog from '../components/hub/CourseCatalog';
+import WorkflowCatalog from '../components/hub/WorkflowCatalog';
 import SkillsCatalog from '../components/hub/SkillsCatalog';
 import SkillContent from '../components/hub/SkillContent';
 import ToolContent from '../components/hub/ToolContent';
@@ -52,7 +53,7 @@ export default function Hub() {
   const [activeSection, setActiveSection] = useState(savedHubState?.activeSection || 'dashboard');
   const [activeTab, setActiveTab] = useState(savedHubState?.activeTab || 'workflows');
   const [pageMode, setPageMode] = useState(savedHubState?.pageMode || 'catalog');
-  const [previewCourse, setPreviewCourse] = useState(savedHubState?.previewCourse || null);
+  const [previewWorkflow, setPreviewWorkflow] = useState(savedHubState?.previewWorkflow || null);
   const [previewSkill, setPreviewSkill] = useState(savedHubState?.previewSkill || null);
   const [previewTool, setPreviewTool] = useState(savedHubState?.previewTool || null);
   const [previewProject, setPreviewProject] = useState(savedHubState?.previewProject || null);
@@ -79,7 +80,7 @@ export default function Hub() {
       activeSection,
       activeTab,
       pageMode,
-      previewCourse,
+      previewWorkflow,
       previewSkill,
       previewTool,
       previewProject,
@@ -95,7 +96,7 @@ export default function Hub() {
     } catch (e) {
       console.error('Error saving hub state:', e);
     }
-  }, [activeSection, activeTab, pageMode, previewCourse, previewSkill, previewTool, previewProject, selectedWorkflow, selectedSkill, selectedTool, selectedProject, selectedItem, workflowViewMode]);
+  }, [activeSection, activeTab, pageMode, previewWorkflow, previewSkill, previewTool, previewProject, selectedWorkflow, selectedSkill, selectedTool, selectedProject, selectedItem, workflowViewMode]);
 
   // Scroll to top on mount (only if not restoring state)
   useEffect(() => {
@@ -155,7 +156,7 @@ export default function Hub() {
     setSelectedItem(null);
 
     // Don't clear preview states - keep them for the navigation pane
-    // setPreviewCourse(null);
+    // setPreviewWorkflow(null);
     // setPreviewSkill(null);
     // setPreviewTool(null);
   };
@@ -174,13 +175,13 @@ export default function Hub() {
     }
   };
 
-  const handleCoursePreview = (workflow) => {
+  const handleWorkflowPreview = (workflow) => {
     console.log('Preview workflow clicked:', workflow);
     setWorkflowPreviewModal({
       isOpen: true,
       workflow: workflow
     });
-    setPreviewCourse(workflow); // Keep for navigation pane
+    setPreviewWorkflow(workflow); // Keep for navigation pane
   };
 
   const handleClosePreviewModal = () => {
@@ -241,7 +242,7 @@ export default function Hub() {
       setPreviewProject(null);
       setSelectedProject(null);
     } else if (tab === 'projects') {
-      setPreviewCourse(null);
+      setPreviewWorkflow(null);
       setSelectedWorkflow(null);
     }
     // Reset to catalog view when switching tabs
@@ -273,25 +274,33 @@ export default function Hub() {
   const handleWorkflowView = async (workflow, viewMode = 'steps') => {
     console.log('View workflow full page:', workflow);
     try {
-      // Use docs-service to get workflow with full content
-      const docData = await docsService.getDoc('workflows', workflow.course_id);
+      // Use template-service to get workflow with full content from Supabase and markdown file
+      const response = await fetchWorkflowById(workflow.workflow_id);
+
+      if (!response.success || !response.workflow) {
+        throw new Error('Failed to load workflow');
+      }
+
+      const data = response.workflow;
 
       const transformedWorkflow = {
-        course_id: docData.metadata.id,
-        title: docData.metadata.name,
-        description: docData.metadata.description || `${docData.metadata.category} workflow`,
-        type: docData.metadata.category,
-        difficulty: docData.metadata.difficulty || 'intermediate',
-        agent: docData.metadata.agent || 'Claude Code',
-        created: docData.metadata.created_date,
-        content: docData.content,
-        raw: docData.raw,
-        frontmatter: docData.frontmatter,
-        steps: docData.metadata.steps || [],
-        estimated_time: docData.metadata.estimated_time
+        workflow_id: data.id,
+        title: data.name,
+        description: data.description,
+        type: data.category,
+        difficulty: data.metadata?.difficulty || 'intermediate',
+        agent: data.metadata?.agent || 'Claude Code',
+        created: data.metadata?.created_date || data.created_at,
+        content: data.content,
+        raw: data.raw,
+        frontmatter: data.frontmatter,
+        steps: data.metadata?.steps || [],
+        estimated_time: data.metadata?.estimated_time,
+        tools: data.metadata?.tools_required || [],
+        skills: data.metadata?.prerequisites || []
       };
 
-      setPreviewCourse(transformedWorkflow);
+      setPreviewWorkflow(transformedWorkflow);
       setSelectedWorkflow(transformedWorkflow);
       setWorkflowViewMode(viewMode);
       setPageMode('workflow');
@@ -424,13 +433,13 @@ export default function Hub() {
     // Catalog views based on activeTab
     if (activeTab === 'workflows') {
       return (
-        <CourseCatalog
-          onCoursePreview={handleCoursePreview}
+        <WorkflowCatalog
+          onWorkflowPreview={handleWorkflowPreview}
           onWorkflowView={handleWorkflowView}
           onWorkflowEdit={handleWorkflowEdit}
           viewMode="table"
           onViewModeChange={() => {}}
-          selectedCourseId={previewCourse?.course_id}
+          selectedWorkflowId={previewWorkflow?.workflow_id}
           activeTab={activeTab}
           onTabChange={handleTabChange}
         />

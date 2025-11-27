@@ -358,7 +358,7 @@ const parseHighlights = (content) => {
 }
 
 // Code block component with copy button
-const CodeBlock = ({ children, className }) => {
+const CodeBlock = ({ children, className, node, onDoubleClick }) => {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
@@ -373,7 +373,10 @@ const CodeBlock = ({ children, className }) => {
   }
 
   return (
-    <CodeBlockWrapper>
+    <CodeBlockWrapper
+      data-paragraph-id={node?.position ? `para-${node.position.start.line}` : undefined}
+      onDoubleClick={onDoubleClick}
+    >
       <CopyButton onClick={handleCopy} $copied={copied}>
         {copied ? '✓ Copied!' : '📋 Copy'}
       </CopyButton>
@@ -423,7 +426,7 @@ const TableOfContentsRenderer = ({ children }) => {
   )
 }
 
-const MarkdownRenderer = ({ content }) => {
+const MarkdownRenderer = ({ content, onParagraphDoubleClick, editMode = false }) => {
   const { frontmatter, content: mainContent } = useMemo(() => {
     const parsed = parseFrontmatter(content || '')
     // Apply Obsidian-specific transformations
@@ -435,18 +438,103 @@ const MarkdownRenderer = ({ content }) => {
 
   // Custom components for markdown elements
   const components = {
-    h1: ({ children, ...props }) => <ReadmeHeading {...props}>{children}</ReadmeHeading>,
-    h2: ({ children, ...props }) => <ReadmeHeading {...props}>{children}</ReadmeHeading>,
-    h3: ({ children, ...props }) => <ReadmeSubheading {...props}>{children}</ReadmeSubheading>,
-    p: ({ children, ...props }) => <ReadmeParagraph {...props}>{children}</ReadmeParagraph>,
-    ul: ({ children, ...props }) => {
+    h1: ({ children, node, ...props }) => (
+      <ReadmeHeading
+        {...props}
+        data-paragraph-id={node?.position ? `para-${node.position.start.line}` : undefined}
+        onDoubleClick={(e) => {
+          if (onParagraphDoubleClick && node) {
+            onParagraphDoubleClick(e, node)
+          }
+        }}
+      >
+        {children}
+      </ReadmeHeading>
+    ),
+    h2: ({ children, node, ...props }) => (
+      <ReadmeHeading
+        {...props}
+        data-paragraph-id={node?.position ? `para-${node.position.start.line}` : undefined}
+        onDoubleClick={(e) => {
+          if (onParagraphDoubleClick && node) {
+            onParagraphDoubleClick(e, node)
+          }
+        }}
+      >
+        {children}
+      </ReadmeHeading>
+    ),
+    h3: ({ children, node, ...props }) => (
+      <ReadmeSubheading
+        {...props}
+        data-paragraph-id={node?.position ? `para-${node.position.start.line}` : undefined}
+        onDoubleClick={(e) => {
+          if (onParagraphDoubleClick && node) {
+            onParagraphDoubleClick(e, node)
+          }
+        }}
+      >
+        {children}
+      </ReadmeSubheading>
+    ),
+    p: ({ children, node, ...props }) => (
+      <ReadmeParagraph
+        {...props}
+        data-paragraph-id={node?.position ? `para-${node.position.start.line}` : undefined}
+        onDoubleClick={(e) => {
+          if (onParagraphDoubleClick && node) {
+            onParagraphDoubleClick(e, node)
+          }
+        }}
+      >
+        {children}
+      </ReadmeParagraph>
+    ),
+    ul: ({ children, node, ...props }) => {
       if (props.className?.includes('toc')) {
         return <TableOfContentsRenderer>{children}</TableOfContentsRenderer>
       }
-      return <ReadmeList {...props}>{children}</ReadmeList>
+      return (
+        <ReadmeList
+          {...props}
+          data-paragraph-id={node?.position ? `para-${node.position.start.line}` : undefined}
+          onDoubleClick={(e) => {
+            if (onParagraphDoubleClick && node) {
+              onParagraphDoubleClick(e, node)
+            }
+          }}
+        >
+          {children}
+        </ReadmeList>
+      )
     },
-    ol: ({ children, ...props }) => <ReadmeList as="ol" {...props}>{children}</ReadmeList>,
-    blockquote: ({ children, ...props }) => <ReadmeBlockquote {...props}>{children}</ReadmeBlockquote>,
+    ol: ({ children, node, ...props }) => (
+      <ReadmeList
+        as="ol"
+        {...props}
+        data-paragraph-id={node?.position ? `para-${node.position.start.line}` : undefined}
+        onDoubleClick={(e) => {
+          if (onParagraphDoubleClick && node) {
+            onParagraphDoubleClick(e, node)
+          }
+        }}
+      >
+        {children}
+      </ReadmeList>
+    ),
+    blockquote: ({ children, node, ...props }) => (
+      <ReadmeBlockquote
+        {...props}
+        data-paragraph-id={node?.position ? `para-${node.position.start.line}` : undefined}
+        onDoubleClick={(e) => {
+          if (onParagraphDoubleClick && node) {
+            onParagraphDoubleClick(e, node)
+          }
+        }}
+      >
+        {children}
+      </ReadmeBlockquote>
+    ),
     a: ({ href, children, ...props }) => {
       if (isInternalLink(href)) {
         return <ReadmeLink to={href} {...props}>{children}</ReadmeLink>
@@ -473,7 +561,19 @@ const MarkdownRenderer = ({ content }) => {
 
       // Regular code blocks with copy button
       if (!inline) {
-        return <CodeBlock className={className}>{children}</CodeBlock>
+        return (
+          <CodeBlock
+            className={className}
+            node={node}
+            onDoubleClick={(e) => {
+              if (onParagraphDoubleClick && node) {
+                onParagraphDoubleClick(e, node)
+              }
+            }}
+          >
+            {children}
+          </CodeBlock>
+        )
       }
 
       // Inline code

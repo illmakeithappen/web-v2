@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import styled from 'styled-components'
 import { useSearchParams } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 import FileTreeNav from '../components/hub/FileTreeNav'
 import CommandPalette from '../components/hub/CommandPalette'
 import MarkdownRenderer from '../components/MarkdownRenderer'
+import MarkdownEditor from '../components/MarkdownEditor'
+import InlineMarkdownEditor from '../components/InlineMarkdownEditor'
 import DocsPreview from '../components/hub/DocsPreview'
-import UploadDocModal from '../components/docs/UploadDocModal'
+import SupabaseUploadModal from '../components/docs/SupabaseUploadModal'
 import docsService from '../services/docs-service'
+import { fetchWorkflowById, fetchWorkflows } from '../services/template-service'
+import { updateContent, parseFrontmatter as parseMarkdownFrontmatter, serializeMarkdown } from '../services/content-edit-service'
 
 // Styled Components
 const DocsContainer = styled.div`
@@ -209,6 +214,7 @@ const MainContent = styled.div`
 const ContentWrapper = styled.div`
   max-width: 900px;
   margin: 0 auto;
+  position: relative;
 `
 
 const PageTitle = styled.h1`
@@ -805,6 +811,7 @@ const parseFrontmatter = (content) => {
 
 function Docs() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const { user } = useAuth()
 
   // Load saved state from localStorage
   const getSavedState = () => {
@@ -878,6 +885,7 @@ function Docs() {
   // View mode for catalog entries (markdown or frontmatter)
   const [viewMode, setViewMode] = useState('markdown')
   const [rawFrontmatter, setRawFrontmatter] = useState('')
+  const [metadata, setMetadata] = useState({})
 
   // Per-item view state tracking (persists when switching between items)
   const [viewModeByItem, setViewModeByItem] = useState({})
@@ -910,6 +918,12 @@ function Docs() {
   const [isSaving, setIsSaving] = useState(false)
   const [originalContent, setOriginalContent] = useState('') // Store original for comparison
   const [editingFilePath, setEditingFilePath] = useState(null) // Track which file is being edited
+
+  // Paragraph-level inline editing state
+  const [editingParagraphId, setEditingParagraphId] = useState(null)
+  const [editingParagraphContent, setEditingParagraphContent] = useState('')
+  const [originalParagraphContent, setOriginalParagraphContent] = useState('')
+  const [paragraphPosition, setParagraphPosition] = useState({ top: 0, left: 0, width: 0, height: 0 })
 
   // Refs for scroll sync between rendered view and edit textarea
   const mainContentRef = useRef(null)
@@ -1293,14 +1307,30 @@ function Docs() {
   useEffect(() => {
     const loadManifests = async () => {
       try {
-        const [workflowsData, skillsData, mcpData, subagentsData] = await Promise.all([
-          docsService.listSection('workflows'),
+        // Fetch workflows from Supabase (both public templates AND user's own workflows)
+        // Pass user ID to get user's workflows OR public templates (is_template=true)
+        const workflowsResponse = await fetchWorkflows(user?.id, { limit: 100 })
+
+        // Transform Supabase workflows to match the expected format
+        const transformedWorkflows = workflowsResponse.success
+          ? workflowsResponse.workflows.map(w => ({
+              id: w.id,  // Use UUID from Supabase
+              name: w.name,
+              description: w.description,
+              category: w.category,
+              tags: w.tags || [],
+              difficulty: w.metadata?.difficulty || 'intermediate'
+            }))
+          : []
+
+        // Fetch other content types from docsService (static files)
+        const [skillsData, mcpData, subagentsData] = await Promise.all([
           docsService.listSection('skills'),
           docsService.listSection('mcp'),
           docsService.listSection('subagents')
         ])
 
-        setAvailableWorkflows(workflowsData.items || [])
+        setAvailableWorkflows(transformedWorkflows)
         setAvailableSkills(skillsData.items || [])
         setAvailableMcp(mcpData.items || [])
         setAvailableSubagents(subagentsData.items || [])
@@ -1311,7 +1341,7 @@ function Docs() {
     }
 
     loadManifests()
-  }, [])
+  }, [user])
 
   // Note: Catalog entries are no longer auto-loaded on section change.
   // Users now select specific entries via the search panel.
@@ -1326,23 +1356,44 @@ function Docs() {
       setError(null)
 
       try {
-        // Use docsService to fetch document content
-        const docData = await docsService.getDoc(selectedSection, activeTab)
-        console.log('Fetched doc data:', docData)
+        let docData = null
+        let content = ''
+        let metadataObj = {}
+        let rawFrontmatterText = ''
 
-        // Extract content and frontmatter from response
-        const content = docData.content || ''
-        const metadata = docData.frontmatter || {}
-        const rawFrontmatterText = docData.raw
-          ? docData.raw.match(/^---\s*\n([\s\S]*?)\n---/)?.[1] || ''
-          : ''
+        // Use template-service for workflows to load from Supabase + markdown files
+        if (selectedSection === 'workflows') {
+          const response = await fetchWorkflowById(activeTab)
+          if (!response.success || !response.workflow) {
+            throw new Error('Failed to load workflow')
+          }
+
+          const workflow = response.workflow
+          content = workflow.content || ''
+          metadataObj = workflow.frontmatter || {}  // Use frontmatter JSONB from database
+          rawFrontmatterText = workflow.raw_content
+            ? workflow.raw_content.match(/^---\s*\n([\s\S]*?)\n---/)?.[1] || ''
+            : ''
+        } else {
+          // Use docsService for other sections (skills, mcp, subagents)
+          docData = await docsService.getDoc(selectedSection, activeTab)
+          console.log('Fetched doc data:', docData)
+
+          // Extract content and frontmatter from response
+          content = docData.content || ''
+          metadataObj = docData.frontmatter || {}
+          rawFrontmatterText = docData.raw_content
+            ? docData.raw_content.match(/^---\s*\n([\s\S]*?)\n---/)?.[1] || ''
+            : ''
+        }
 
         console.log('Parsed content length:', content.length)
-        console.log('Metadata:', metadata)
+        console.log('Metadata:', metadataObj)
 
         // Set content for main display (without frontmatter)
         setSelectedEntryContent(content)
         setRawFrontmatter(rawFrontmatterText)
+        setMetadata(metadataObj)
 
         // Restore view state for this item (or default to 'markdown')
         if (selectedSection === 'workflows' || selectedSection === 'tools') {
@@ -1364,10 +1415,10 @@ function Docs() {
         }
 
         // Set preview data with type detection
-        const previewType = detectContentType(selectedSection, metadata)
+        const previewType = detectContentType(selectedSection, metadataObj)
         setPreviewData({
           type: previewType,
-          metadata: metadata,
+          metadata: metadataObj,
           rawContent: content.substring(0, 500),  // First 500 chars for README
           section: activeTab
         })
@@ -1648,23 +1699,38 @@ function Docs() {
     console.log('Upload complete:', section, docId)
 
     try {
-      // Reload the manifest for the section
-      const sectionData = await docsService.listSection(section)
+      // Workflows are stored in Supabase, other sections use docsService
+      if (section === 'workflows') {
+        // Fetch workflows from Supabase
+        const workflowsResponse = await fetchWorkflows(user?.id, { limit: 100 })
 
-      // Update the appropriate state
-      switch (section) {
-        case 'workflows':
-          setAvailableWorkflows(sectionData.items || [])
-          break
-        case 'skills':
-          setAvailableSkills(sectionData.items || [])
-          break
-        case 'mcp':
-          setAvailableMcp(sectionData.items || [])
-          break
-        case 'subagents':
-          setAvailableSubagents(sectionData.items || [])
-          break
+        const transformedWorkflows = workflowsResponse.success
+          ? workflowsResponse.workflows.map(w => ({
+              id: w.id,
+              name: w.name,
+              description: w.description,
+              category: w.category,
+              tags: w.tags || [],
+              difficulty: w.metadata?.difficulty || 'intermediate'
+            }))
+          : []
+
+        setAvailableWorkflows(transformedWorkflows)
+      } else {
+        // Other sections: use docsService
+        const sectionData = await docsService.listSection(section)
+
+        switch (section) {
+          case 'skills':
+            setAvailableSkills(sectionData.items || [])
+            break
+          case 'mcp':
+            setAvailableMcp(sectionData.items || [])
+            break
+          case 'subagents':
+            setAvailableSubagents(sectionData.items || [])
+            break
+        }
       }
 
       // Select the newly uploaded document
@@ -1811,17 +1877,35 @@ function Docs() {
     setIsSaving(true)
     try {
       // Parse the edited content to extract frontmatter and content
-      const { metadata: parsedFrontmatter, content: parsedContent } = parseFrontmatter(editContent)
+      const { frontmatter: parsedFrontmatter, content: parsedContent } = parseMarkdownFrontmatter(editContent)
 
-      // Use docsService to update the document
-      await docsService.updateDoc(selectedSection, activeTab, {
-        frontmatter: parsedFrontmatter,
-        content: parsedContent
-      })
+      // Determine content type for updateContent service
+      const contentType = selectedSection === 'workflows' ? 'workflow'
+        : selectedSection === 'skills' ? 'skill'
+        : selectedSection === 'mcp' ? 'mcp_server'
+        : selectedSection === 'subagents' ? 'subagent'
+        : null
+
+      if (!contentType || !activeTab) {
+        throw new Error('Invalid content type or active tab')
+      }
+
+      // Update content in Supabase using content-edit-service
+      const result = await updateContent(
+        contentType,
+        activeTab,  // ID of the workflow/skill/mcp/subagent
+        parsedContent,
+        editContent,  // raw_content with frontmatter
+        parsedFrontmatter
+      )
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update content')
+      }
 
       // Update state based on what was edited
       if (editingFilePath) {
-        // Saved a subdirectory file
+        // Saved a subdirectory file (references)
         setSubdirContent(editContent)
       } else {
         // Saved main document - parse frontmatter
@@ -1832,27 +1916,144 @@ function Docs() {
 
       setOriginalContent(editContent)
 
-      // Capture textarea scroll position before exiting edit mode
-      if (textareaRef.current) {
-        const { scrollTop, scrollHeight, clientHeight } = textareaRef.current
-        const maxScroll = scrollHeight - clientHeight
-        const percentage = maxScroll > 0 ? scrollTop / maxScroll : 0
-        // Reverse the compensation applied when entering edit mode
-        setScrollPercentage(percentage / 1.15)
-      }
-
       // Exit edit mode
       setIsEditMode(false)
       setEditContent('')
       setEditingFilePath(null)
 
-      console.log('Document saved successfully')
+      console.log('Document saved successfully to database')
     } catch (err) {
       console.error('Error saving document:', err)
-      alert('Failed to save document. Please try again.')
+      alert(`Failed to save document: ${err.message}`)
     } finally {
       setIsSaving(false)
     }
+  }
+
+  // Helper function to extract paragraph markdown from full content using node position
+  const extractParagraphMarkdown = (fullMarkdown, position) => {
+    if (!position || !position.start || !position.end) {
+      console.error('Invalid node position:', position)
+      return ''
+    }
+    const lines = fullMarkdown.split('\n')
+    const startLine = position.start.line - 1 // Convert to 0-indexed
+    const endLine = position.end.line - 1
+    return lines.slice(startLine, endLine + 1).join('\n')
+  }
+
+  // Handle double-click on paragraph to enter inline edit mode
+  const handleParagraphDoubleClick = (event, node) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    // Check for concurrent edits
+    if (editingParagraphId && editingParagraphContent !== originalParagraphContent) {
+      const confirm = window.confirm(
+        'You have unsaved changes. Discard them and edit another paragraph?'
+      )
+      if (!confirm) return
+    }
+
+    // Don't allow paragraph editing if in full-document edit mode
+    if (isEditMode) {
+      alert('Please exit full-document edit mode before editing paragraphs.')
+      return
+    }
+
+    // Extract markdown for this paragraph
+    const paragraphMarkdown = extractParagraphMarkdown(
+      selectedEntryContent,
+      node.position
+    )
+
+    if (!paragraphMarkdown) {
+      console.error('Failed to extract paragraph content')
+      return
+    }
+
+    // Calculate overlay position relative to MainContent container
+    const rect = event.currentTarget.getBoundingClientRect()
+    const containerRect = mainContentRef.current?.getBoundingClientRect()
+
+    if (!containerRect) {
+      console.error('MainContent ref not available')
+      return
+    }
+
+    setParagraphPosition({
+      top: rect.top - containerRect.top + (mainContentRef.current?.scrollTop || 0),
+      left: rect.left - containerRect.left,
+      width: rect.width,
+      height: rect.height
+    })
+
+    // Enter edit mode
+    setEditingParagraphId(`para-${node.position.start.line}`)
+    setEditingParagraphContent(paragraphMarkdown)
+    setOriginalParagraphContent(paragraphMarkdown)
+  }
+
+  // Save edited paragraph
+  const handleSaveParagraph = async (newContent) => {
+    // Replace paragraph in full document
+    const updatedContent = selectedEntryContent.replace(
+      originalParagraphContent,
+      newContent
+    )
+
+    // Reconstruct full document with frontmatter
+    const fullDoc = rawFrontmatter
+      ? `---\n${rawFrontmatter}\n---\n\n${updatedContent}`
+      : updatedContent
+
+    // Parse frontmatter
+    const { frontmatter, content } = parseMarkdownFrontmatter(fullDoc)
+
+    // Determine content type
+    const contentType = selectedSection === 'workflows' ? 'workflow'
+      : selectedSection === 'skills' ? 'skill'
+      : selectedSection === 'mcp' ? 'mcp_server'
+      : selectedSection === 'subagents' ? 'subagent'
+      : null
+
+    if (!contentType || !activeTab) {
+      alert('Unable to save: Invalid content type or no active tab')
+      return
+    }
+
+    try {
+      setIsSaving(true)
+      const result = await updateContent(
+        contentType,
+        activeTab,
+        updatedContent,
+        fullDoc,
+        frontmatter
+      )
+
+      if (result.success) {
+        setSelectedEntryContent(updatedContent)
+        setEditingParagraphId(null)
+        setEditingParagraphContent('')
+        setOriginalParagraphContent('')
+        console.log('Paragraph saved successfully')
+      } else {
+        throw new Error(result.error || 'Failed to save paragraph')
+      }
+    } catch (err) {
+      console.error('Failed to save paragraph:', err)
+      alert(`Failed to save: ${err.message}`)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Cancel paragraph editing
+  const handleCancelParagraphEdit = () => {
+    setEditingParagraphId(null)
+    setEditingParagraphContent('')
+    setOriginalParagraphContent('')
   }
 
   // Check if content has been modified
@@ -1987,14 +2188,17 @@ function Docs() {
         // If value is empty, show placeholder
         if (!value) return <em style={{ color: '#999' }}>(empty)</em>
 
+        // Ensure value is a string
+        const stringValue = typeof value === 'string' ? value : String(value)
+
         // If value is multiline, wrap in pre tag
-        if (value.includes('\n')) {
-          return <pre>{value}</pre>
+        if (stringValue.includes('\n')) {
+          return <pre>{stringValue}</pre>
         }
 
         // If value looks like a list, format it
-        if (value.startsWith('[') && value.endsWith(']')) {
-          const items = value.slice(1, -1).split(',').map(item => item.trim())
+        if (stringValue.startsWith('[') && stringValue.endsWith(']')) {
+          const items = stringValue.slice(1, -1).split(',').map(item => item.trim())
           return items.map((item, idx) => (
             <span key={idx}>
               <code>{item}</code>
@@ -2004,10 +2208,19 @@ function Docs() {
         }
 
         // Otherwise return as plain text
-        return value
+        return stringValue
       }
 
-      const frontmatterEntries = (viewMode === 'frontmatter' || mainViewMode === 'yaml') ? parseFrontmatterForTable(rawFrontmatter) : []
+      // For frontmatter display, prefer structured metadata over parsed YAML
+      // This ensures all fields from database are shown (title, description, purpose, steps, etc.)
+      const frontmatterEntries = (viewMode === 'frontmatter' || mainViewMode === 'yaml')
+        ? (Object.keys(metadata).length > 0
+            ? Object.entries(metadata).map(([key, value]) => ({
+                key,
+                value: typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)
+              }))
+            : parseFrontmatterForTable(rawFrontmatter))
+        : []
 
       // Get subdirectory structure for current skill
       const currentSubdirs = selectedSection === 'skills' && activeTab
@@ -2080,13 +2293,12 @@ function Docs() {
                   ✕ Cancel
                 </EditButton>
               </DocumentHeader>
-              <EditTextarea
-                ref={textareaRef}
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
+              <MarkdownEditor
+                initialValue={editContent}
+                onChange={setEditContent}
+                onSave={handleSaveDocument}
+                height="70vh"
                 placeholder="Enter document content..."
-                spellCheck={false}
-                autoFocus
               />
               <EditActions>
                 <CancelButton onClick={handleCancelEdit} disabled={isSaving}>
@@ -2190,11 +2402,17 @@ function Docs() {
             {/* Content display */}
             {selectedFile ? (
               // Show subdirectory file content
-              <MarkdownRenderer content={subdirContent} />
+              <MarkdownRenderer
+                content={subdirContent}
+                onParagraphDoubleClick={handleParagraphDoubleClick}
+              />
             ) : hasTabs ? (
               // Skills with tabs: show based on mainViewMode
               mainViewMode === 'skill.md' ? (
-                <MarkdownRenderer content={selectedEntryContent} />
+                <MarkdownRenderer
+                  content={selectedEntryContent}
+                  onParagraphDoubleClick={handleParagraphDoubleClick}
+                />
               ) : (
                 <FrontmatterContainer>
                   <CopyButton onClick={handleCopyFrontmatter}>
@@ -2214,7 +2432,10 @@ function Docs() {
                 </FrontmatterContainer>
               )
             ) : viewMode === 'markdown' ? (
-              <MarkdownRenderer content={selectedEntryContent} />
+              <MarkdownRenderer
+                content={selectedEntryContent}
+                onParagraphDoubleClick={handleParagraphDoubleClick}
+              />
             ) : (
               <FrontmatterContainer>
                 <CopyButton onClick={handleCopyFrontmatter}>
@@ -2234,6 +2455,18 @@ function Docs() {
               </FrontmatterContainer>
             )}
             </ContentWithTabs>
+          )}
+
+          {/* Inline paragraph editor overlay */}
+          {editingParagraphId && (
+            <InlineMarkdownEditor
+              content={editingParagraphContent}
+              position={paragraphPosition}
+              onChange={setEditingParagraphContent}
+              onSave={handleSaveParagraph}
+              onCancel={handleCancelParagraphEdit}
+              isSaving={isSaving}
+            />
           )}
         </ContentWrapper>
       )
@@ -2340,7 +2573,7 @@ function Docs() {
       />
 
       {/* Upload Document Modal */}
-      <UploadDocModal
+      <SupabaseUploadModal
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
         activeSection={selectedSection}

@@ -802,3 +802,5 @@ CREATE POLICY "Users can view their own courses"
 ---
 
 **For questions or contributions, contact the development team.**
+- store all documentation in vault-web-v2
+- make use of the supabase mcp when working with supabase

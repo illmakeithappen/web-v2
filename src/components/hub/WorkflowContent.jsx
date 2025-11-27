@@ -971,7 +971,7 @@ export default function WorkflowContent({ workflow, onBack, initialViewMode = 's
     try {
       // Call the API to update the step
       await workflowService.updateWorkflowStep({
-        workflowId: workflow.course_id,
+        workflowId: workflow.workflow_id,
         stepNumber: editedStep.number,
         stepData: {
           title: editedStep.title || '',
@@ -1025,11 +1025,11 @@ export default function WorkflowContent({ workflow, onBack, initialViewMode = 's
 
     try {
       setIsDeleting(true);
-      await workflowService.deleteWorkflow(workflow.course_id);
+      await workflowService.deleteWorkflow(workflow.workflow_id);
 
       // Call onDelete callback if provided
       if (onDelete) {
-        onDelete(workflow.course_id);
+        onDelete(workflow.workflow_id);
       }
 
       // Go back to workflow list
