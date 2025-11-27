@@ -1,63 +1,121 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { carbonColors, carbonSpacing, carbonTypography, carbonTransitions } from '../../styles/carbonTheme';
 
-const TabBarContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  background: transparent;
-  border-bottom: none;
+const DropdownContainer = styled.div`
+  position: relative;
   padding: ${carbonSpacing.spacing03};
-  gap: ${carbonSpacing.spacing02};
 `;
 
-const Tab = styled.button`
+const SelectedSection = styled.button`
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  background: ${props => props.$active ? 'white' : 'rgba(255, 255, 255, 0.7)'};
-  border: 1px solid ${props => props.$active ? '#FFA500' : 'rgba(0, 0, 0, 0.15)'};
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #FFA500;
   border-radius: 4px;
   cursor: pointer;
   font-family: ${carbonTypography.fontFamily.sans};
-  font-size: 0.8rem;
-  font-weight: ${props => props.$active ? '600' : '500'};
-  color: ${props => props.$active ? '#2C2C2C' : '#666'};
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2C2C2C;
   transition: all ${carbonTransitions.duration.fast02} ${carbonTransitions.easing.standard};
-  text-align: left;
-  box-shadow: ${props => props.$active ? '0 1px 3px rgba(255, 165, 0, 0.2)' : '0 1px 2px rgba(0, 0, 0, 0.05)'};
+  box-shadow: 0 1px 3px rgba(255, 165, 0, 0.2);
 
   &:hover {
-    background: white;
-    border-color: ${props => props.$active ? '#FFA500' : 'rgba(0, 0, 0, 0.25)'};
-    color: #2C2C2C;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+    background: #FFFAF5;
+    box-shadow: 0 2px 6px rgba(255, 165, 0, 0.25);
   }
 
   &:focus {
     outline: 2px solid ${carbonColors.focus};
     outline-offset: 1px;
   }
+`;
 
-  &:active {
-    transform: scale(0.98);
+const SectionLabel = styled.span`
+  flex: 1;
+  text-align: left;
+`;
+
+const SectionCount = styled.span`
+  font-size: ${carbonTypography.fontSize.caption01};
+  color: ${carbonColors.text03};
+  margin-right: 8px;
+`;
+
+const DropdownArrow = styled.span`
+  font-size: 10px;
+  transition: transform 0.2s ease;
+  transform: ${props => props.$open ? 'rotate(180deg)' : 'rotate(0deg)'};
+`;
+
+const DropdownMenu = styled.div`
+  position: absolute;
+  top: calc(100% - 4px);
+  left: ${carbonSpacing.spacing03};
+  right: ${carbonSpacing.spacing03};
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  overflow: hidden;
+  opacity: ${props => props.$open ? 1 : 0};
+  visibility: ${props => props.$open ? 'visible' : 'hidden'};
+  transform: ${props => props.$open ? 'translateY(0)' : 'translateY(-8px)'};
+  transition: all 0.2s ease;
+`;
+
+const DropdownItem = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  background: ${props => props.$active ? '#FFF8F0' : 'transparent'};
+  border: none;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  font-family: ${carbonTypography.fontFamily.sans};
+  font-size: 0.85rem;
+  font-weight: ${props => props.$active ? '600' : '500'};
+  color: ${props => props.$active ? '#2C2C2C' : '#666'};
+  text-align: left;
+  transition: all 0.15s ease;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: ${props => props.$active ? '#FFF8F0' : '#F5F5F5'};
+    color: #2C2C2C;
+  }
+
+  &:focus {
+    outline: none;
+    background: #F0F0F0;
   }
 `;
 
-const TabIcon = styled.span`
-  font-size: 16px;
-  line-height: 1;
-`;
-
-const TabLabel = styled.span`
+const ItemLabel = styled.span`
   flex: 1;
-  white-space: nowrap;
 `;
 
-const TabCount = styled.span`
+const ItemCount = styled.span`
   font-size: ${carbonTypography.fontSize.caption01};
   color: ${carbonColors.text03};
+`;
+
+const ActiveIndicator = styled.span`
+  width: 6px;
+  height: 6px;
+  background: #FFA500;
+  border-radius: 50%;
+  margin-left: 8px;
 `;
 
 const SectionTabBar = ({
@@ -68,6 +126,9 @@ const SectionTabBar = ({
   mcpCount = 0,
   subagentCount = 0
 }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
   const tabs = [
     { id: 'readme', label: 'README' },
     { id: 'workflows', label: 'Workflows', count: workflowCount },
@@ -76,24 +137,65 @@ const SectionTabBar = ({
     { id: 'subagents', label: 'Subagents', count: subagentCount },
   ];
 
+  const activeTab = tabs.find(tab => tab.id === activeSection) || tabs[0];
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Close dropdown on escape key
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, []);
+
+  const handleSelect = (tabId) => {
+    onSectionChange(tabId);
+    setIsOpen(false);
+  };
+
   return (
-    <TabBarContainer role="tablist" aria-label="Content sections">
-      {tabs.map((tab) => (
-        <Tab
-          key={tab.id}
-          role="tab"
-          aria-selected={activeSection === tab.id}
-          aria-controls={`${tab.id}-panel`}
-          tabIndex={activeSection === tab.id ? 0 : -1}
-          $active={activeSection === tab.id}
-          onClick={() => onSectionChange(tab.id)}
-        >
-          {tab.icon && <TabIcon aria-hidden="true">{tab.icon}</TabIcon>}
-          <TabLabel>{tab.label}</TabLabel>
-          {tab.count > 0 && <TabCount>({tab.count})</TabCount>}
-        </Tab>
-      ))}
-    </TabBarContainer>
+    <DropdownContainer ref={containerRef}>
+      <SelectedSection
+        onClick={() => setIsOpen(!isOpen)}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+      >
+        <SectionLabel>{activeTab.label}</SectionLabel>
+        {activeTab.count > 0 && <SectionCount>({activeTab.count})</SectionCount>}
+        <DropdownArrow $open={isOpen}>▼</DropdownArrow>
+      </SelectedSection>
+
+      <DropdownMenu $open={isOpen} role="listbox">
+        {tabs.map((tab) => (
+          <DropdownItem
+            key={tab.id}
+            role="option"
+            aria-selected={activeSection === tab.id}
+            $active={activeSection === tab.id}
+            onClick={() => handleSelect(tab.id)}
+          >
+            <ItemLabel>{tab.label}</ItemLabel>
+            {tab.count > 0 && <ItemCount>({tab.count})</ItemCount>}
+            {activeSection === tab.id && <ActiveIndicator />}
+          </DropdownItem>
+        ))}
+      </DropdownMenu>
+    </DropdownContainer>
   );
 };
 
