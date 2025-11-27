@@ -841,8 +841,9 @@ function Docs() {
   const savedState = getSavedState()
 
   // Get initial state from URL, localStorage, or defaults
-  const initialSection = searchParams.get('section') || savedState?.selectedSection || 'workflows'
-  const initialTab = searchParams.get('tab') || savedState?.activeTab || null
+  // First-time visitors see README > welcome.md (Getting Started)
+  const initialSection = searchParams.get('section') || savedState?.selectedSection || 'readme'
+  const initialTab = searchParams.get('tab') || savedState?.activeTab || (savedState?.selectedSection ? null : 'welcome')
 
   // Navigation visibility state with localStorage persistence
   const [isNavVisible, setIsNavVisible] = useState(() => {
