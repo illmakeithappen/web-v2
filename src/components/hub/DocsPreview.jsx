@@ -411,44 +411,209 @@ function ToolPreviewContent({ metadata }) {
   );
 }
 
+// Section Summaries - Comprehensive descriptions inspired by Anthropic's blog style
+const sectionSummaries = {
+  welcome: {
+    title: 'Getting Started',
+    headline: 'Your guide to working with AI more effectively.',
+    steps: [
+      { action: 'Start with a Deploy workflow', desc: 'Pick a workflow that builds something you need. Follow along with AI.' },
+      { action: 'Browse Workflows', desc: 'Explore Navigate, Educate, and Deploy guides for different learning styles.' },
+      { action: 'Load a Skill', desc: 'Give AI consistent behavior by loading a skill into your session.' },
+      { action: 'Connect MCP servers', desc: 'Let AI access your databases, files, and external services.' },
+      { action: 'Try Subagents', desc: 'Delegate complex tasks to specialized AI workers.' }
+    ],
+    tip: 'Press Cmd+K to search across all content instantly.'
+  },
+  workflows: {
+    title: 'Workflows',
+    headline: 'Step-by-step guides for humans and AI to execute together.',
+    description: 'Unlike automation tools that run without you, workflows keep you in control while AI handles the heavy lifting. They capture expertise so you can repeat successful processes.',
+    types: [
+      { name: 'Navigate', desc: 'Explore options before committing' },
+      { name: 'Educate', desc: 'Learn by doing with explanations' },
+      { name: 'Deploy', desc: 'Build something with clear steps' }
+    ],
+    whenToUse: 'Use workflows when you need guided structure for complex tasks.'
+  },
+  skills: {
+    title: 'Skills',
+    headline: 'Reusable instructions that give AI consistent, repeatable behavior.',
+    description: 'A skill is a focused document that teaches AI how to do something specific - format code a certain way, analyze data with a framework, or generate content in a particular style. Once loaded, the AI applies the skill whenever relevant.',
+    benefit: 'Skills are the secret weapon: small documents that produce consistent results across sessions. Stop re-explaining the same requirements.',
+    whenToUse: 'Use skills when you want AI to behave the same way every time.'
+  },
+  mcp: {
+    title: 'MCP Servers',
+    headline: 'Model Context Protocol servers connect AI to external tools and data.',
+    description: 'MCP is an open protocol that lets AI access databases, files, APIs, and other services. It\'s the bridge between AI and the real world - enabling database queries, file operations, GitHub interactions, and more.',
+    benefit: 'Think of MCP servers as giving AI "hands" to interact with systems it couldn\'t otherwise touch.',
+    whenToUse: 'Use MCP when AI needs to read/write real data or call external services.'
+  },
+  subagents: {
+    title: 'Subagents',
+    headline: 'Specialized AI agents for delegating specific tasks.',
+    description: 'Subagents are focused AI workers that handle particular domains. A research subagent finds information. A code review subagent checks your work. An orchestrator coordinates multiple subagents for complex tasks.',
+    benefit: 'They enable divide-and-conquer: break complex work into pieces, let specialized agents handle each part.',
+    whenToUse: 'Use subagents when tasks benefit from decomposition or parallel processing.'
+  }
+}
+
+// Styled components for rich summary display
+const SummaryHeadline = styled.p`
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #24292f;
+  line-height: 1.4;
+`
+
+const SummaryText = styled.p`
+  margin: 0 0 10px 0;
+  font-size: 12px;
+  color: #57606a;
+  line-height: 1.5;
+`
+
+const TypesList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+`
+
+const TypeItem = styled.div`
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+`
+
+const TypeName = styled.span`
+  font-weight: 600;
+  color: #24292f;
+`
+
+const TypeDesc = styled.span`
+  color: #57606a;
+`
+
+const WhenToUse = styled.p`
+  margin: 8px 0 0 0;
+  font-size: 11px;
+  color: #0969da;
+  font-style: italic;
+`
+
+const StepsList = styled.ol`
+  margin: 8px 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`
+
+const StepListItem = styled.li`
+  font-size: 12px;
+  line-height: 1.4;
+  color: #24292f;
+`
+
+const StepAction = styled.span`
+  font-weight: 600;
+  color: #0969da;
+`
+
+const StepDesc = styled.span`
+  color: #57606a;
+`
+
+const ProTip = styled.div`
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: #f6f8fa;
+  border-left: 3px solid #0969da;
+  border-radius: 0 4px 4px 0;
+  font-size: 11px;
+  color: #57606a;
+
+  strong {
+    color: #24292f;
+  }
+`
+
 // README Preview Component
 function ReadmePreviewContent({ content, section }) {
-  // For welcome.md, extract and show "Getting Started" section
-  if (section === 'welcome' && content) {
-    const gettingStartedMatch = content.match(/## Getting started:?[\s\S]*?(?=\n## |$)/i)
-    const gettingStartedContent = gettingStartedMatch
-      ? gettingStartedMatch[0].replace(/^## Getting started:?\s*\n/i, '').trim()
-      : content.substring(0, 300)
+  // Use dedicated comprehensive summaries for all main sections
+  const summary = sectionSummaries[section]
+  if (summary) {
+    // Welcome section - show getting started steps
+    if (summary.steps) {
+      return (
+        <>
+          <Header>
+            <Title>{summary.title}</Title>
+          </Header>
+          <Section>
+            <SummaryHeadline>{summary.headline}</SummaryHeadline>
+            <StepsList>
+              {summary.steps.map((step, idx) => (
+                <StepListItem key={idx}>
+                  <StepAction>{step.action}</StepAction>
+                  <StepDesc> — {step.desc}</StepDesc>
+                </StepListItem>
+              ))}
+            </StepsList>
+            {summary.tip && (
+              <ProTip><strong>Tip:</strong> {summary.tip}</ProTip>
+            )}
+          </Section>
+        </>
+      )
+    }
 
+    // Other sections - show description with types/benefits
     return (
       <>
         <Header>
-          <Title>Getting Started</Title>
+          <Title>{summary.title}</Title>
         </Header>
         <Section>
-          <Description>{gettingStartedContent.substring(0, 400)}...</Description>
+          <SummaryHeadline>{summary.headline}</SummaryHeadline>
+          <SummaryText>{summary.description}</SummaryText>
+
+          {summary.types && (
+            <TypesList>
+              <SectionTitle>Three types:</SectionTitle>
+              {summary.types.map((type, idx) => (
+                <TypeItem key={idx}>
+                  <TypeName>{type.name}</TypeName>
+                  <TypeDesc>- {type.desc}</TypeDesc>
+                </TypeItem>
+              ))}
+            </TypesList>
+          )}
+
+          {summary.benefit && (
+            <SummaryText>{summary.benefit}</SummaryText>
+          )}
+
+          <WhenToUse>{summary.whenToUse}</WhenToUse>
         </Section>
       </>
     )
   }
 
-  // For workflows, skills, tools - extract intro paragraphs as summary
-  if (['workflows', 'skills', 'tools'].includes(section) && content) {
-    // Extract content after title but before any subheadings (###)
-    const afterTitle = content.replace(/^#[^#\n]*\n+/, '') // Remove main title
-    const summaryMatch = afterTitle.match(/^[\s\S]*?(?=\n###|$)/) // Get content before first ###
+  // Fallback for tools or other sections - extract intro paragraphs
+  if (content) {
+    const afterTitle = content.replace(/^#[^#\n]*\n+/, '')
+    const summaryMatch = afterTitle.match(/^[\s\S]*?(?=\n###|$)/)
     const summaryContent = summaryMatch ? summaryMatch[0].trim() : afterTitle.substring(0, 400)
-
-    const sectionTitles = {
-      workflows: 'Workflows',
-      skills: 'Skills',
-      tools: 'Tools'
-    }
 
     return (
       <>
         <Header>
-          <Title>{sectionTitles[section]} Summary</Title>
+          <Title>{section.charAt(0).toUpperCase() + section.slice(1)} Summary</Title>
         </Header>
         <Section>
           <Description>{summaryContent.substring(0, 500)}...</Description>

@@ -1278,22 +1278,17 @@ function Docs() {
   }, [selectedSection, availableWorkflows, availableSkills, availableMcp, availableSubagents])
 
   // Load README overview markdown files on mount
+  // Tries Supabase doc_overviews table first, falls back to static files
   useEffect(() => {
     const loadOverviewFiles = async () => {
       try {
-        const [readmeRes, workflowsRes, skillsRes, mcpRes, subagentsRes] = await Promise.all([
-          fetch('/content/docs/welcome.md').then(r => r.text()),
-          fetch('/content/docs/workflows.md').then(r => r.text()),
-          fetch('/content/docs/skills.md').then(r => r.text()),
-          fetch('/content/docs/mcp.md').then(r => r.text()),
-          fetch('/content/docs/subagents.md').then(r => r.text())
-        ])
+        const overviews = await docsService.fetchAllOverviews()
 
-        setReadmeMain(readmeRes)
-        setWorkflowsOverview(workflowsRes)
-        setSkillsOverview(skillsRes)
-        setMcpOverview(mcpRes)
-        setSubagentsOverview(subagentsRes)
+        setReadmeMain(overviews.welcome || '')
+        setWorkflowsOverview(overviews.workflows || '')
+        setSkillsOverview(overviews.skills || '')
+        setMcpOverview(overviews.mcp || '')
+        setSubagentsOverview(overviews.subagents || '')
       } catch (err) {
         console.error('Error loading overview files:', err)
         setError('Failed to load overview documentation')
@@ -1540,7 +1535,7 @@ function Docs() {
   }
 
   // Handle navigation changes
-  const handleSectionChange = (section, tab = null) => {
+  const handleSectionChange = (section, tab) => {
     console.log('handleSectionChange called:', section, tab)
 
     // Save current tab for current section before switching (if we have one)
@@ -1569,7 +1564,7 @@ function Docs() {
       // For catalog sections, tab is the entry ID
       let effectiveTab = tab
 
-      // If no tab specified and undefined (not explicitly null), try to restore the last active tab for this section
+      // If no tab specified (undefined), try to restore the last active tab for this section
       // If explicitly null (back button clicked), don't restore
       if (tab === undefined) {
         effectiveTab = lastActiveTabBySection[section] || null
@@ -1754,20 +1749,14 @@ function Docs() {
         console.warn('Backend sync not available:', syncErr.message)
       }
 
-      // Reload overview files (static, not managed by docsService)
-      const [readmeRes, workflowsRes, skillsRes, mcpRes, subagentsRes] = await Promise.all([
-        fetch('/content/docs/welcome.md').then(r => r.text()),
-        fetch('/content/docs/workflows.md').then(r => r.text()),
-        fetch('/content/docs/skills.md').then(r => r.text()),
-        fetch('/content/docs/mcp.md').then(r => r.text()),
-        fetch('/content/docs/subagents.md').then(r => r.text())
-      ])
+      // Reload overview files (from Supabase doc_overviews with static fallback)
+      const overviews = await docsService.fetchAllOverviews()
 
-      setReadmeMain(readmeRes)
-      setWorkflowsOverview(workflowsRes)
-      setSkillsOverview(skillsRes)
-      setMcpOverview(mcpRes)
-      setSubagentsOverview(subagentsRes)
+      setReadmeMain(overviews.welcome || '')
+      setWorkflowsOverview(overviews.workflows || '')
+      setSkillsOverview(overviews.skills || '')
+      setMcpOverview(overviews.mcp || '')
+      setSubagentsOverview(overviews.subagents || '')
 
       // Reload manifests via docsService (with static fallback built-in)
       const [workflowsData, skillsData, mcpData, subagentsData] = await Promise.all([
@@ -1925,6 +1914,46 @@ function Docs() {
     } catch (err) {
       console.error('Error saving document:', err)
       alert(`Failed to save document: ${err.message}`)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Save overview document (welcome, workflows, skills, mcp, subagents overviews)
+  const handleSaveOverview = async (slug, content) => {
+    setIsSaving(true)
+    try {
+      const result = await docsService.updateOverview(slug, content)
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update overview')
+      }
+
+      // Update local state based on which overview was edited
+      switch (slug) {
+        case 'welcome':
+          setReadmeMain(content)
+          break
+        case 'workflows':
+          setWorkflowsOverview(content)
+          break
+        case 'skills':
+          setSkillsOverview(content)
+          break
+        case 'mcp':
+          setMcpOverview(content)
+          break
+        case 'subagents':
+          setSubagentsOverview(content)
+          break
+      }
+
+      console.log(`Overview ${slug} saved successfully`)
+      return { success: true }
+    } catch (err) {
+      console.error('Error saving overview:', err)
+      alert(`Failed to save overview: ${err.message}`)
+      return { success: false, error: err.message }
     } finally {
       setIsSaving(false)
     }

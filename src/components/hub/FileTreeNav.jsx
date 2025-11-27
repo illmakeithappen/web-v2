@@ -353,7 +353,7 @@ export default function FileTreeNav({
       {/* Section Tab Bar */}
       <SectionTabBar
         activeSection={selectedSection}
-        onSectionChange={(section) => onSectionChange(section, null)}
+        onSectionChange={(section) => onSectionChange(section)}
         workflowCount={availableWorkflows.length}
         skillCount={availableSkills.length}
         mcpCount={availableMcp.length}

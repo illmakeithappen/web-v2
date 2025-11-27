@@ -5,6 +5,8 @@
  * Falls back to static files if API is unavailable.
  */
 
+import { supabase } from '../lib/supabase'
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 class DocsService {
@@ -232,7 +234,9 @@ class DocsService {
     const fileMap = {
       workflows: 'WORKFLOW.md',
       skills: 'SKILL.md',
-      tools: 'TOOL.md'
+      tools: 'TOOL.md',
+      mcp: 'MCP.md',
+      subagents: 'SUBAGENT.md'
     };
 
     const response = await fetch(`/content/${section}/${docId}/${fileMap[section]}`);
@@ -329,6 +333,152 @@ class DocsService {
     } catch {
       return false;
     }
+  }
+
+  // ================================================================
+  // Doc Overviews (Supabase)
+  // ================================================================
+
+  /**
+   * Fetch all doc overviews from Supabase
+   * Falls back to static files if Supabase fails
+   * @returns {Promise<Object>} - Map of slug to content
+   */
+  async fetchAllOverviews() {
+    try {
+      const { data, error } = await supabase
+        .from('doc_overviews')
+        .select('slug, title, content, description')
+
+      if (error) {
+        console.warn('Supabase doc_overviews query failed, using static fallback:', error.message)
+        return this._staticOverviewsFallback()
+      }
+
+      if (!data || data.length === 0) {
+        console.warn('No doc_overviews found in Supabase, using static fallback')
+        return this._staticOverviewsFallback()
+      }
+
+      // Convert array to map by slug
+      const overviews = {}
+      data.forEach(doc => {
+        overviews[doc.slug] = doc.content
+      })
+
+      return overviews
+    } catch (err) {
+      console.warn('Error fetching doc_overviews, using static fallback:', err.message)
+      return this._staticOverviewsFallback()
+    }
+  }
+
+  /**
+   * Fetch a single doc overview by slug
+   * @param {string} slug - 'welcome' | 'workflows' | 'skills' | 'mcp' | 'subagents'
+   * @returns {Promise<string>} - Markdown content
+   */
+  async fetchOverview(slug) {
+    try {
+      const { data, error } = await supabase
+        .from('doc_overviews')
+        .select('content')
+        .eq('slug', slug)
+        .single()
+
+      if (error || !data) {
+        return this._staticOverviewFallback(slug)
+      }
+
+      return data.content
+    } catch (err) {
+      console.warn(`Error fetching overview ${slug}, using static fallback:`, err.message)
+      return this._staticOverviewFallback(slug)
+    }
+  }
+
+  /**
+   * Update a doc overview in Supabase
+   * @param {string} slug
+   * @param {string} content - Full markdown content
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async updateOverview(slug, content) {
+    try {
+      const { error } = await supabase
+        .from('doc_overviews')
+        .update({ content, updated_at: new Date().toISOString() })
+        .eq('slug', slug)
+
+      if (error) {
+        return { success: false, error: error.message }
+      }
+
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  }
+
+  /**
+   * Static fallback for all overviews
+   * @private
+   */
+  async _staticOverviewsFallback() {
+    const slugs = ['welcome', 'workflows', 'skills', 'mcp', 'subagents']
+    const fileNames = {
+      welcome: 'welcome.md',
+      workflows: 'workflows.md',
+      skills: 'skills.md',
+      mcp: 'mcp.md',
+      subagents: 'subagents.md'
+    }
+
+    const results = await Promise.all(
+      slugs.map(async slug => {
+        try {
+          const response = await fetch(`/content/docs/${fileNames[slug]}`)
+          if (response.ok) {
+            return { slug, content: await response.text() }
+          }
+        } catch (err) {
+          console.warn(`Failed to load static ${slug}:`, err.message)
+        }
+        return { slug, content: '' }
+      })
+    )
+
+    const overviews = {}
+    results.forEach(({ slug, content }) => {
+      overviews[slug] = content
+    })
+
+    return overviews
+  }
+
+  /**
+   * Static fallback for single overview
+   * @private
+   */
+  async _staticOverviewFallback(slug) {
+    const fileNames = {
+      welcome: 'welcome.md',
+      workflows: 'workflows.md',
+      skills: 'skills.md',
+      mcp: 'mcp.md',
+      subagents: 'subagents.md'
+    }
+
+    try {
+      const response = await fetch(`/content/docs/${fileNames[slug]}`)
+      if (response.ok) {
+        return await response.text()
+      }
+    } catch (err) {
+      console.warn(`Failed to load static ${slug}:`, err.message)
+    }
+
+    return ''
   }
 }
 
