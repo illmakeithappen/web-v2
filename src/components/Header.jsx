@@ -213,15 +213,11 @@ function Header() {
     fetchUserAttributes()
   }, [isAuthenticated, user, getUserAttributes])
 
-  // Filter navigation items based on authentication status
-  const navItems = isAuthenticated
-    ? [
-        { path: '/doc', label: 'docs' },
-        { path: '/hub', label: 'hub' }
-      ]
-    : [
-        { path: '/doc', label: 'docs' }
-      ]
+  // Navigation items - hub and docs visible to all users
+  const navItems = [
+    { path: '/doc', label: 'docs' },
+    { path: '/hub', label: 'hub' }
+  ]
 
   const getUserInitial = () => {
     if (userAttributes?.name) {
