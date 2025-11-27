@@ -1243,40 +1243,43 @@ function Docs() {
 
   // Get current section items for Command Palette
   const getCurrentSectionItems = useCallback(() => {
-    // Upload action item (appears at top of all lists)
-    const uploadAction = {
+    // Upload action item (appears at top of all lists) - only for logged-in users
+    const uploadAction = user ? {
       id: '__upload__',
       name: 'Upload New...',
       description: `Upload a new ${selectedSection.slice(0, -1)} from a .md file`,
       type: 'action',
       isAction: true
-    }
+    } : null
+
+    // Filter out null upload action for non-logged-in users
+    const withUpload = (items) => uploadAction ? [uploadAction, ...items] : items
 
     switch (selectedSection) {
       case 'workflows':
-        return [uploadAction, ...availableWorkflows.map(w => ({
+        return withUpload(availableWorkflows.map(w => ({
           ...w,
           type: w.type || 'workflow'
-        }))]
+        })))
       case 'skills':
-        return [uploadAction, ...availableSkills.map(s => ({
+        return withUpload(availableSkills.map(s => ({
           ...s,
           type: s.difficulty || 'skill'
-        }))]
+        })))
       case 'mcp':
-        return [uploadAction, ...availableMcp.map(m => ({
+        return withUpload(availableMcp.map(m => ({
           ...m,
           type: m.category || 'mcp'
-        }))]
+        })))
       case 'subagents':
-        return [uploadAction, ...availableSubagents.map(sa => ({
+        return withUpload(availableSubagents.map(sa => ({
           ...sa,
           type: sa.category || 'subagent'
-        }))]
+        })))
       default:
         return []
     }
-  }, [selectedSection, availableWorkflows, availableSkills, availableMcp, availableSubagents])
+  }, [selectedSection, availableWorkflows, availableSkills, availableMcp, availableSubagents, user])
 
   // Load README overview markdown files on mount
   // Tries Supabase doc_overviews table first, falls back to static files
@@ -2435,16 +2438,18 @@ function Docs() {
               </PostItTabContainer>
             )}
 
-            {/* Document header with edit button - positioned after tabs */}
-            <DocumentHeader>
-              <EditButton
-                $active={false}
-                onClick={handleEnterEditMode}
-                disabled={isSaving}
-              >
-                ✎ Edit
-              </EditButton>
-            </DocumentHeader>
+            {/* Document header with edit button - positioned after tabs, only for logged-in users */}
+            {user && (
+              <DocumentHeader>
+                <EditButton
+                  $active={false}
+                  onClick={handleEnterEditMode}
+                  disabled={isSaving}
+                >
+                  ✎ Edit
+                </EditButton>
+              </DocumentHeader>
+            )}
 
             {/* Content display */}
             {selectedFile ? (
