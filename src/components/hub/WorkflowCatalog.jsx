@@ -793,21 +793,24 @@ export default function WorkflowCatalog({
           <TabSwitcherButtonGroup>
             <TabSwitcherButton
               $active={activeTab === 'workflows'}
+              $isLast={!user}
               onClick={() => onTabChange('workflows')}
               aria-label="Workflows"
               title="Workflows"
             >
               Workflows
             </TabSwitcherButton>
-            <TabSwitcherButton
-              $active={activeTab === 'projects'}
-              $isLast
-              onClick={() => onTabChange('projects')}
-              aria-label="Projects"
-              title="Projects"
-            >
-              Projects
-            </TabSwitcherButton>
+            {user && (
+              <TabSwitcherButton
+                $active={activeTab === 'projects'}
+                $isLast
+                onClick={() => onTabChange('projects')}
+                aria-label="Projects"
+                title="Projects"
+              >
+                Projects
+              </TabSwitcherButton>
+            )}
           </TabSwitcherButtonGroup>
         )}
       </CarbonToolbar>
