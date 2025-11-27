@@ -1290,6 +1290,23 @@ function Docs() {
         setSkillsOverview(overviews.skills || '')
         setMcpOverview(overviews.mcp || '')
         setSubagentsOverview(overviews.subagents || '')
+
+        // Set initial preview data for first-time visitors on README section
+        if (selectedSection === 'readme' && activeTab) {
+          const contentMap = {
+            welcome: overviews.welcome,
+            workflows: overviews.workflows,
+            skills: overviews.skills,
+            mcp: overviews.mcp,
+            subagents: overviews.subagents
+          }
+          setPreviewData({
+            type: 'readme',
+            metadata: {},
+            rawContent: contentMap[activeTab] || '',
+            section: activeTab
+          })
+        }
       } catch (err) {
         console.error('Error loading overview files:', err)
         setError('Failed to load overview documentation')
