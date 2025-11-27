@@ -788,29 +788,26 @@ export default function WorkflowCatalog({
         showDensityControls={false}
         filtersExpanded={filterPanelOpen}
       >
-        {/* Tab Switcher */}
-        {onTabChange && (
+        {/* Tab Switcher - only for authenticated users */}
+        {onTabChange && user && (
           <TabSwitcherButtonGroup>
             <TabSwitcherButton
               $active={activeTab === 'workflows'}
-              $isLast={!user}
               onClick={() => onTabChange('workflows')}
               aria-label="Workflows"
               title="Workflows"
             >
               Workflows
             </TabSwitcherButton>
-            {user && (
-              <TabSwitcherButton
-                $active={activeTab === 'projects'}
-                $isLast
-                onClick={() => onTabChange('projects')}
-                aria-label="Projects"
-                title="Projects"
-              >
-                Projects
-              </TabSwitcherButton>
-            )}
+            <TabSwitcherButton
+              $active={activeTab === 'projects'}
+              $isLast
+              onClick={() => onTabChange('projects')}
+              aria-label="Projects"
+              title="Projects"
+            >
+              Projects
+            </TabSwitcherButton>
           </TabSwitcherButtonGroup>
         )}
       </CarbonToolbar>
