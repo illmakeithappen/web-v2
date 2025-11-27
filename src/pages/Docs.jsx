@@ -2605,7 +2605,7 @@ function Docs() {
       <SupabaseUploadModal
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
-        activeSection={selectedSection}
+        activeSection={selectedSection === 'readme' ? 'workflows' : selectedSection}
         onUploadComplete={handleUploadComplete}
       />
     </DocsContainer>

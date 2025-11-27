@@ -684,8 +684,23 @@ function SupabaseUploadModal({ isOpen, onClose, activeSection, onUploadComplete 
     try {
       const { mainFile, references } = parsedData
 
-      // Determine table and content type
-      const table = `${section}`
+      // Map sections to database tables
+      const tableMap = {
+        workflows: 'workflows',
+        skills: 'skills',
+        mcp: 'mcp',
+        subagents: 'subagents'
+      }
+
+      const table = tableMap[section]
+
+      // Guard against invalid sections (e.g., 'readme')
+      if (!table) {
+        setError(`Cannot upload to "${section}" section. Please select Workflows, Skills, MCP, or Subagents.`)
+        setIsUploading(false)
+        return
+      }
+
       const contentType = section === 'workflows' ? 'workflow'
         : section === 'skills' ? 'skill'
         : section === 'mcp' ? 'mcp_server'
