@@ -1,0 +1,106 @@
+# ====================
+# Environment Variables
+# ====================
+# All .env files containing secrets
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# Keep safe environment templates (no secrets)
+!.env.example
+!.env.development
+!.env.production
+
+# ====================
+# Claude Code Settings
+# ====================
+# Local-only Claude settings (not shared with team)
+CLAUDE.local.md
+.claude/CLAUDE.local.md
+.claude/settings.local.json
+settings.local.json
+
+# ====================
+# Python
+# ====================
+venv/
+.venv/
+*.pyc
+__pycache__/
+.pytest_cache/
+*.egg-info/
+coverage/
+.coverage
+htmlcov/
+
+# ====================
+# Node.js
+# ====================
+node_modules/
+frontend_node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ====================
+# Build Artifacts
+# ====================
+dist/
+build/
+*.log
+logs/
+logs/*.log
+.vercel/
+
+# ====================
+# IDE
+# ====================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ====================
+# OS Files
+# ====================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ====================
+# Docker
+# ====================
+postgres_data/
+backend_cache/
+
+# ====================
+# AWS
+# ====================
+*.pem
+*.key
+
+# ====================
+# Testing & Coverage
+# ====================
+.nyc_output
+.coverage
+htmlcov/
+
+# ====================
+# Temporary Files
+# ====================
+temp/
+tmp/
+*.tmp
+*.temp
+
+*storybook.log
+storybook-static

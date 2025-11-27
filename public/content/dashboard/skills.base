@@ -1,0 +1,19 @@
+views:
+  - type: table
+    name: skills
+    filters:
+      and:
+        - file.inFolder("skills")
+        - file.name == "SKILL"
+    order:
+      - file.name
+      - name
+      - description
+      - file.links
+    sort:
+      - property: file.name
+        direction: ASC
+    columnSize:
+      file.name: 134
+      note.name: 154
+      note.description: 623

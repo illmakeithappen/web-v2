@@ -1,0 +1,19 @@
+{
+  "entries": [
+    {
+      "id": "gitthub-workflow",
+      "name": "gitthub-workflow",
+      "description": "Generate comprehensive, actionable gitthub workflows for complex tasks using a two-phase approach (conversational outline followed by structured expansion).\nThis skill should be used when users say \"create a gitthub workflow to...\" or want to create step-by-step workflows to navigate/compare approaches, learn concepts progressively, or deploy/implement systems.\nCreates detailed workflows with clear instructions and deliverables, saved to vault-website/workflows directory.\n",
+      "category": "automation",
+      "tags": [
+        "workflow-generation",
+        "automation",
+        "structured-output",
+        "two-phase-approach",
+        "discovery",
+        "user-guidance"
+      ],
+      "difficulty": "intermediate"
+    }
+  ]
+}

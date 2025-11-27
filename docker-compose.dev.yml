@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_HOST=db
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=ai_learning_platform
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=localdevpass
+      - AWS_REGION=eu-north-1
+      - ENVIRONMENT=development
+      - SECRET_KEY=dev-secret-key-not-for-production
+      - JWT_SECRET_KEY=dev-jwt-secret-not-for-production
+      - BACKEND_URL=http://localhost:8000
+      - FRONTEND_URL=http://localhost:3000
+    volumes:
+      - ./backend:/app:cached  # Live code reload
+      - backend_cache:/app/__pycache__  # Cache Python bytecode
+    depends_on:
+      - db
+    restart: unless-stopped
+    networks:
+      - farp-dev
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:8000
+      - CHOKIDAR_USEPOLLING=true  # Enable polling for file watching in containers
+    volumes:
+      - ./frontend:/app:cached  # Live code reload
+      - frontend_node_modules:/app/node_modules  # Prevent node_modules conflicts
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - farp-dev
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=ai_learning_platform
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=localdevpass
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    restart: unless-stopped
+    networks:
+      - farp-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_learning_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
+  backend_cache:
+    driver: local
+  frontend_node_modules:
+    driver: local
+
+networks:
+  farp-dev:
+    driver: bridge

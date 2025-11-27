@@ -1,0 +1,56 @@
+services:
+  - type: web
+    name: farp-backend-staging
+    env: docker
+    branch: develop  # Deploy from develop branch
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: DATABASE_HOST
+        value: ai-learning-db.c3au0waaib3b.eu-north-1.rds.amazonaws.com
+      - key: DATABASE_PORT
+        value: 5432
+      - key: DATABASE_NAME
+        value: ai_learning_platform
+      - key: DATABASE_USER
+        value: postgres
+      - key: DATABASE_PASSWORD
+        sync: false  # Set as secret in Render dashboard
+      - key: AWS_ACCESS_KEY_ID
+        sync: false  # Set as secret in Render dashboard
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false  # Set as secret in Render dashboard
+      - key: AWS_REGION
+        value: eu-north-1
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: ENVIRONMENT
+        value: staging
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: farp-backend-staging
+          property: host
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: farp-frontend-staging
+          property: host
+
+  - type: web
+    name: farp-frontend-staging
+    env: docker
+    branch: develop  # Deploy from develop branch
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    envVars:
+      - key: NODE_ENV
+        value: staging
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: farp-backend-staging
+          property: host

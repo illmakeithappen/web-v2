@@ -1,0 +1,3122 @@
+import React, { useState, useEffect } from 'react'
+import styled from 'styled-components'
+import axios from 'axios'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+import MarkdownRenderer from '../components/MarkdownRenderer'
+import { COURSE_TEMPLATES } from '../data/courseTemplates'
+import NavigationLayout from '../components/shared/NavigationLayout'
+
+// API base URL
+const API_URL = import.meta.env.VITE_API_URL || ''
+
+const MainContentArea = styled.div`
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  /* Custom scrollbar styling */
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    transition: background 0.2s ease;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  /* Firefox scrollbar styling */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) rgba(0, 0, 0, 0.05);
+`
+
+const NavigationPane = styled.div`
+  background: #DDDDDD;
+  padding: 12px;
+  border: 1px solid black;
+  border-radius: 4px;
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.3);
+  margin-bottom: 2rem;
+  width: 100%;
+  box-sizing: border-box;
+`
+
+const TabBar = styled.div`
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+`
+
+const Tab = styled.button`
+  padding: 1.5rem 3rem;
+  background: ${props => props.$active
+    ? 'linear-gradient(135deg, #FFA500 0%, #FF8C00 100%)'
+    : 'linear-gradient(to bottom, #f5f5f5, #d5d5d5)'};
+  color: ${props => props.$active ? 'white' : 'var(--gitthub-black)'};
+  border: 2px solid ${props => props.$active ? '#FF8C00' : 'black'};
+  border-radius: 16px;
+  font-size: 1.3rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: ${props => props.$active
+    ? '0 4px 12px rgba(255, 165, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.3)'
+    : '2px 2px 0 rgba(0, 0, 0, 0.2)'};
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-width: 200px;
+  justify-content: center;
+
+  &:hover {
+    background: ${props => props.$active
+      ? 'linear-gradient(135deg, #FF9400 0%, #FF7700 100%)'
+      : 'linear-gradient(to bottom, #ffffff, #e0e0e0)'};
+    transform: translateY(-2px);
+    box-shadow: ${props => props.$active
+      ? '0 6px 16px rgba(255, 165, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.3)'
+      : '3px 3px 0 rgba(0, 0, 0, 0.2)'};
+  }
+
+  &:active {
+    transform: translateY(0);
+    box-shadow: ${props => props.$active
+      ? '0 2px 8px rgba(255, 165, 0, 0.3)'
+      : 'inset 2px 2px 4px rgba(0, 0, 0, 0.2)'};
+  }
+
+  @media (max-width: 768px) {
+    padding: 1.2rem 2rem;
+    font-size: 1.1rem;
+    min-width: 160px;
+  }
+`
+
+const FilterBar = styled.div`
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+`
+
+const SearchInput = styled.input`
+  padding: 0.45rem 0.7rem;
+  background: white;
+  font-size: 0.95rem;
+  flex: 1;
+  min-width: 180px;
+  max-width: 300px;
+  color: var(--gitthub-black);
+  border: 1px solid black;
+  border-radius: 3px;
+
+  &::placeholder {
+    color: var(--gitthub-gray);
+  }
+
+  &:focus {
+    outline: none;
+    border: 2px solid black;
+    padding: calc(0.45rem - 1px) calc(0.7rem - 1px);
+  }
+`
+
+const FilterSelect = styled.select`
+  padding: 0.45rem 1.2rem 0.45rem 0.9rem;
+  background: linear-gradient(to bottom, #f0f8ff, #e0f0ff);
+  font-size: 0.95rem;
+  cursor: pointer;
+  color: var(--gitthub-black);
+  font-weight: 500;
+  flex: 1;
+  max-width: 160px;
+  border: 1px solid black;
+  border-radius: 12px;
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.2);
+  appearance: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='black' d='M6 8L0 0h12z'/%3E%3C/svg%3E"),
+    linear-gradient(to bottom, #f0f8ff, #e0f0ff);
+  background-repeat: no-repeat, repeat;
+  background-position: right 0.7rem center, center;
+  background-size: 10px, cover;
+
+  &:hover {
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='black' d='M6 8L0 0h12z'/%3E%3C/svg%3E"),
+      linear-gradient(to bottom, #e6f3ff, #d1e7ff);
+    background-repeat: no-repeat, repeat;
+    background-position: right 0.7rem center, center;
+    background-size: 10px, cover;
+  }
+
+  &:focus {
+    outline: none;
+    border: 2px solid black;
+    padding: calc(0.45rem - 1px) calc(1.2rem - 1px) calc(0.45rem - 1px) calc(0.9rem - 1px);
+  }
+`
+
+const ActionButton = styled.button`
+  padding: 0.45rem 1.2rem;
+  background: ${props => props.$primary ? '#FFA500' : 'linear-gradient(to bottom, #f0f8ff, #e0f0ff)'};
+  color: ${props => props.$primary ? 'white' : 'var(--gitthub-black)'};
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  min-width: ${props => props.$primary ? '140px' : '80px'};
+  border: 1px solid black;
+  border-radius: 12px;
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.2);
+  position: relative;
+  transition: background-color 0.1s;
+
+  &:hover {
+    background: ${props => props.$primary ? '#FF9400' : 'linear-gradient(to bottom, #e6f3ff, #d1e7ff)'};
+  }
+
+  &:active {
+    background: ${props => props.$primary ? '#FF8300' : 'linear-gradient(to bottom, #d1e7ff, #c1d7ef)'};
+    box-shadow: none;
+    transform: translate(1px, 1px);
+  }
+
+  &:focus {
+    outline: none;
+    border: 2px solid black;
+    padding: calc(0.45rem - 1px) calc(1.2rem - 1px);
+  }
+`
+
+const FilterGroup = styled.div`
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex: 1;
+`
+
+const ContentArea = styled.div`
+  width: 100%;
+  height: 100%;
+`
+
+const SectionContainer = styled.div`
+  display: ${props => props.$active ? 'block' : 'none'};
+  animation: ${props => props.$active ? 'fadeIn 0.3s ease-in-out' : 'none'};
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+`
+
+// Magazine Section Styles
+const ArticleForm = styled.div`
+  background: white;
+  border: 2px solid var(--gitthub-gray);
+  border-radius: 8px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+`
+
+const FormTitle = styled.h2`
+  font-size: 1.5rem;
+  color: var(--gitthub-black);
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`
+
+const FormGroup = styled.div`
+  margin-bottom: 1.5rem;
+`
+
+const Label = styled.label`
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--gitthub-black);
+  font-size: 0.95rem;
+`
+
+const Input = styled.input`
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid var(--gitthub-gray);
+  border-radius: 4px;
+  font-size: 1rem;
+  box-sizing: border-box;
+
+  &:focus {
+    outline: none;
+    border-color: var(--gitthub-black);
+  }
+`
+
+const TextArea = styled.textarea`
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid var(--gitthub-gray);
+  border-radius: 4px;
+  font-size: 1rem;
+  min-height: 200px;
+  resize: vertical;
+  font-family: inherit;
+  box-sizing: border-box;
+
+  &:focus {
+    outline: none;
+    border-color: var(--gitthub-black);
+  }
+`
+
+const Select = styled.select`
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid var(--gitthub-gray);
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  box-sizing: border-box;
+
+  &:focus {
+    outline: none;
+    border-color: var(--gitthub-black);
+  }
+`
+
+const ButtonGroup = styled.div`
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+`
+
+const Button = styled.button`
+  padding: 0.75rem 1.5rem;
+  border: 2px solid var(--gitthub-black);
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: ${props => props.$primary ? 'var(--gitthub-black)' : 'white'};
+  color: ${props => props.$primary ? 'white' : 'var(--gitthub-black)'};
+
+  &:hover {
+    background: ${props => props.$primary ? 'var(--gitthub-gray)' : 'var(--gitthub-light-beige)'};
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`
+
+const NewsContainer = styled.div`
+  background: #faf9f7;
+  padding: 2rem 0;
+`
+
+const DottedDivider = styled.div`
+  border-top: 2px dotted #ccc;
+  margin: 2rem 0;
+`
+
+const FeaturedArticle = styled.article`
+  background: transparent;
+  cursor: pointer;
+  transition: opacity 0.3s ease;
+  margin-bottom: 2rem;
+  padding-bottom: 2rem;
+
+  &:hover {
+    opacity: 0.85;
+  }
+`
+
+const FeaturedContent = styled.div`
+  padding: 0;
+`
+
+const FeaturedCategory = styled.div`
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--gitthub-gray);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.75rem;
+`
+
+const FeaturedTitle = styled.h2`
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--gitthub-black);
+  line-height: 1.2;
+  margin-bottom: 1rem;
+  font-family: Georgia, serif;
+
+  @media (max-width: 768px) {
+    font-size: 1.75rem;
+  }
+`
+
+const FeaturedExcerpt = styled.p`
+  font-size: 1.1rem;
+  color: #333;
+  line-height: 1.6;
+  margin-bottom: 0.75rem;
+`
+
+const UpdatedTime = styled.div`
+  font-size: 0.75rem;
+  color: #c00;
+  font-weight: 700;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  &::before {
+    content: '●';
+    font-size: 0.5rem;
+  }
+`
+
+const TopStoriesSection = styled.div`
+  margin-top: 1rem;
+  padding-top: 2rem;
+  border-top: 2px dotted #ccc;
+`
+
+const StoriesDivider = styled.div`
+  border-top: 2px dotted #ccc;
+  margin-bottom: 2rem;
+`
+
+const ArticleGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0;
+  margin-bottom: 2rem;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+`
+
+const ArticleCard = styled.article`
+  background: transparent;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 1.5rem 0;
+  border-bottom: 1px dotted #ddd;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    opacity: 0.75;
+  }
+`
+
+
+const CategoryLabel = styled.div`
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #c00;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+`
+
+const ArticleTitle = styled.h3`
+  font-size: 1.35rem;
+  color: var(--gitthub-black);
+  margin-bottom: 0.75rem;
+  font-weight: 700;
+  line-height: 1.3;
+  font-family: Georgia, serif;
+`
+
+const ArticleTimestamp = styled.div`
+  font-size: 0.7rem;
+  color: #666;
+  text-transform: uppercase;
+  margin-top: 0.5rem;
+  letter-spacing: 0.5px;
+`
+
+const ArticleQuote = styled.div`
+  margin: 0.75rem 0;
+  padding-left: 1rem;
+  border-left: 3px solid #ccc;
+  font-size: 0.95rem;
+  color: var(--gitthub-black);
+  font-style: italic;
+
+  &::before {
+    content: '"';
+    font-size: 1.5rem;
+    color: #0066cc;
+    margin-right: 0.25rem;
+  }
+`
+
+const ArticleAuthor = styled.div`
+  font-size: 0.85rem;
+  color: #666;
+  margin-top: 0.5rem;
+  font-weight: 600;
+`
+
+const ArticleActions = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+`
+
+const ActionIconButton = styled.button`
+  padding: 0.5rem 1rem;
+  background: ${props => props.$delete ? '#ff4444' : props.$bookmark ? '#FFA500' : 'var(--gitthub-black)'};
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+
+  &:hover {
+    opacity: 0.8;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`
+
+// Campus Section Styles
+const ResourceGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 2rem;
+`
+
+const ResourceCard = styled.article`
+  background: white;
+  border: 2px solid var(--gitthub-gray);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.3s ease;
+
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  }
+`
+
+const ResourceHeader = styled.div`
+  padding: 1rem;
+  background: linear-gradient(to bottom, #E0E0E0, #C0C0C0);
+  border-bottom: 2px solid var(--gitthub-gray);
+`
+
+const ResourceType = styled.span`
+  display: inline-block;
+  padding: 0.3rem 0.8rem;
+  background: var(--gitthub-black);
+  color: white;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+`
+
+const ResourceTitle = styled.h3`
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--gitthub-black);
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
+`
+
+const ResourceBody = styled.div`
+  padding: 1.5rem;
+`
+
+const ResourceDescription = styled.p`
+  color: var(--gitthub-gray);
+  line-height: 1.6;
+  margin-bottom: 1rem;
+`
+
+const ResourceMeta = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1rem;
+  border-top: 1px solid var(--gitthub-light-beige);
+`
+
+const ResourceTags = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+`
+
+const Tag = styled.span`
+  padding: 0.3rem 0.6rem;
+  background: var(--gitthub-light-beige);
+  color: var(--gitthub-black);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+`
+
+const CourseBadge = styled.span`
+  padding: 0.4rem 0.8rem;
+  background: ${props =>
+    props.$difficulty === 'beginner' ? '#4ade80' :
+    props.$difficulty === 'intermediate' ? '#fbbf24' :
+    '#ef4444'
+  };
+  color: white;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+`
+
+const CourseMetaInfo = styled.div`
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  margin: 1rem 0;
+  flex-wrap: wrap;
+
+  span {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--gitthub-gray);
+    font-weight: 500;
+  }
+`
+
+const CourseSection = styled.div`
+  margin: 2rem 0;
+
+  h2 {
+    font-size: 1.8rem;
+    color: var(--gitthub-black);
+    margin-bottom: 1rem;
+    font-weight: 700;
+  }
+
+  p {
+    font-size: 1.1rem;
+    line-height: 1.8;
+    color: #374151;
+    margin-bottom: 1rem;
+  }
+
+  ul {
+    list-style: disc;
+    padding-left: 2rem;
+    margin: 1rem 0;
+
+    li {
+      font-size: 1rem;
+      line-height: 1.8;
+      color: #374151;
+      margin-bottom: 0.5rem;
+    }
+  }
+`
+
+const ModuleList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1rem;
+`
+
+const ModuleCard = styled.div`
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 1.5rem;
+  transition: all 0.2s;
+
+  &:hover {
+    border-color: var(--gitthub-black);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  }
+
+  h3 {
+    font-size: 1.2rem;
+    color: var(--gitthub-black);
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+
+  p {
+    color: var(--gitthub-gray);
+    margin-bottom: 1rem;
+  }
+
+  ul {
+    list-style: none;
+    padding-left: 0;
+
+    li {
+      padding-left: 1.5rem;
+      position: relative;
+      color: #374151;
+      margin-bottom: 0.3rem;
+
+      &::before {
+        content: '✓';
+        position: absolute;
+        left: 0;
+        color: #10b981;
+        font-weight: bold;
+      }
+    }
+  }
+`
+
+const StartCourseButton = styled(Link)`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 2rem;
+  background: var(--gitthub-black);
+  color: white;
+  text-decoration: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 1.1rem;
+  transition: all 0.3s;
+  margin-top: 2rem;
+
+  &:hover {
+    background: var(--gitthub-gray);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+`
+
+const ViewButton = styled.button`
+  padding: 0.5rem 1rem;
+  background: var(--gitthub-black);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+
+  &:hover {
+    background: var(--gitthub-gray);
+  }
+`
+
+const CuratedSection = styled.div`
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 2px solid var(--gitthub-gray);
+`
+
+const SectionTitle = styled.h2`
+  font-size: 1.8rem;
+  color: var(--gitthub-black);
+  margin-bottom: 1.5rem;
+  font-weight: 700;
+`
+
+const CuratedGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+`
+
+const CuratedCard = styled.a`
+  display: block;
+  background: white;
+  border: 2px solid var(--gitthub-gray);
+  border-radius: 8px;
+  padding: 1.5rem;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  position: relative;
+
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    border-color: #FFA500;
+  }
+`
+
+const CuratedIcon = styled.div`
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+`
+
+const CuratedTitle = styled.h3`
+  font-size: 1.2rem;
+  color: var(--gitthub-black);
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+`
+
+const CuratedDescription = styled.p`
+  font-size: 0.9rem;
+  color: var(--gitthub-gray);
+  line-height: 1.5;
+`
+
+const ArticleDetailView = styled.div`
+  background: white;
+  border: 2px solid var(--gitthub-gray);
+  border-radius: 8px;
+  padding: 3rem;
+  max-width: 900px;
+  margin: 0 auto;
+`
+
+const ArticleDetailHeader = styled.div`
+  margin-bottom: 2rem;
+  padding-bottom: 2rem;
+  border-bottom: 2px solid var(--gitthub-light-beige);
+`
+
+const ArticleDetailTitle = styled.h1`
+  font-size: 2.5rem;
+  color: var(--gitthub-black);
+  margin-bottom: 1rem;
+  font-weight: 800;
+  line-height: 1.2;
+`
+
+const ArticleDetailMetaRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+`
+
+const ArticleDetailMeta = styled.div`
+  display: flex;
+  gap: 1.5rem;
+  font-size: 1rem;
+  color: var(--gitthub-gray);
+`
+
+const ArticleDetailContent = styled.div`
+  font-size: 1.1rem;
+  line-height: 1.8;
+  color: var(--gitthub-black);
+  white-space: pre-wrap;
+  margin-bottom: 2rem;
+`
+
+const BackButton = styled.button`
+  padding: 0.75rem 1.5rem;
+  background: var(--gitthub-black);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+
+  &:hover {
+    background: var(--gitthub-gray);
+    transform: translateX(-5px);
+  }
+`
+
+// README Document Styles
+const ReadmeDocument = styled.div`
+  background: #ffffff;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  padding: 3rem;
+  max-width: 100%;
+  width: 100%;
+  margin: 0;
+  line-height: 1.7;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.12),
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 4px 12px rgba(0, 0, 0, 0.05),
+    0 8px 24px rgba(0, 0, 0, 0.03);
+  position: relative;
+
+  /* Paper texture subtle effect */
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+      linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.01) 50%, transparent 100%),
+      repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.008) 2px,
+        rgba(0,0,0,0.008) 4px
+      );
+    pointer-events: none;
+    border-radius: 6px;
+  }
+
+  @media (max-width: 768px) {
+    padding: 2rem 1.5rem;
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.1),
+      0 2px 8px rgba(0, 0, 0, 0.05);
+  }
+`
+
+const ReadmeHeader = styled.div`
+  margin-bottom: 2.5rem;
+  padding-bottom: 2rem;
+  border-bottom: 3px solid var(--gitthub-light-beige);
+`
+
+const ReadmeMainTitle = styled.h1`
+  font-size: 3rem;
+  color: var(--gitthub-black);
+  margin-bottom: 0.5rem;
+  font-weight: 800;
+  line-height: 1.2;
+
+  @media (max-width: 768px) {
+    font-size: 2.2rem;
+  }
+`
+
+const ReadmeSubtitle = styled.p`
+  font-size: 1.3rem;
+  color: var(--gitthub-gray);
+  margin: 0;
+  line-height: 1.6;
+
+  @media (max-width: 768px) {
+    font-size: 1.1rem;
+  }
+`
+
+const TableOfContents = styled.div`
+  background: #f6f8fa;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 1.5rem;
+  margin-bottom: 2.5rem;
+`
+
+const TocTitle = styled.h3`
+  font-size: 1.1rem;
+  color: var(--gitthub-black);
+  margin: 0 0 1rem 0;
+  font-weight: 700;
+`
+
+const TocList = styled.ul`
+  list-style: none;
+  padding: 0;
+  margin: 0;
+`
+
+const TocItem = styled.li`
+  margin: 0.5rem 0;
+  padding-left: ${props => props.$level === 2 ? '1.5rem' : '0'};
+`
+
+const TocLink = styled.a`
+  color: #0969da;
+  text-decoration: none;
+  font-size: 0.95rem;
+
+  &:hover {
+    text-decoration: underline;
+  }
+`
+
+const ReadmeSection = styled.section`
+  margin-bottom: 3rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+`
+
+const ReadmeHeading = styled.h2`
+  font-size: 2rem;
+  color: var(--gitthub-black);
+  margin: 2rem 0 1.5rem 0;
+  font-weight: 700;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #d1d5db;
+  line-height: 1.3;
+
+  @media (max-width: 768px) {
+    font-size: 1.6rem;
+  }
+`
+
+const ReadmeSubheading = styled.h3`
+  font-size: 1.5rem;
+  color: var(--gitthub-black);
+  margin: 1.5rem 0 1rem 0;
+  font-weight: 600;
+  line-height: 1.3;
+
+  @media (max-width: 768px) {
+    font-size: 1.3rem;
+  }
+`
+
+const ReadmeParagraph = styled.p`
+  font-size: 1.05rem;
+  line-height: 1.8;
+  color: #24292f;
+  margin: 1rem 0;
+`
+
+const ReadmeList = styled.ul`
+  font-size: 1.05rem;
+  line-height: 1.8;
+  color: #24292f;
+  margin: 1rem 0;
+  padding-left: 2rem;
+
+  li {
+    margin: 0.5rem 0;
+  }
+`
+
+const ReadmeLink = styled(Link)`
+  color: #0969da;
+  text-decoration: none;
+  font-weight: 600;
+
+  &:hover {
+    text-decoration: underline;
+  }
+`
+
+const ReadmeExternalLink = styled.a`
+  color: #0969da;
+  text-decoration: none;
+  font-weight: 600;
+
+  &:hover {
+    text-decoration: underline;
+  }
+`
+
+const FeatureBox = styled.div`
+  background: #f6f8fa;
+  border-left: 4px solid #FFA500;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  border-radius: 4px;
+`
+
+const LoadingSpinner = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+
+  &::after {
+    content: '';
+    width: 50px;
+    height: 50px;
+    border: 4px solid var(--gitthub-light-beige);
+    border-top-color: var(--gitthub-black);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+`
+
+const MessageCard = styled.div`
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-weight: 600;
+`
+
+const SuccessMessage = styled(MessageCard)`
+  background: #EFE;
+  color: var(--gitthub-black);
+  border: 2px solid #4CAF50;
+`
+
+const AIAssistPanel = styled.div`
+  background: #f0f8ff;
+  border: 2px dashed #4169e1;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+`
+
+const AITitle = styled.div`
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #4169e1;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`
+
+const AIButton = styled.button`
+  padding: 0.6rem 1.2rem;
+  background: #4169e1;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+
+  &:hover {
+    background: #3555c7;
+  }
+
+  &:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+  }
+`
+
+// User Profile Scorecard - styled components
+const DashboardHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  background: linear-gradient(135deg, rgba(0, 47, 167, 0.03) 0%, rgba(255, 165, 0, 0.03) 100%);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+
+  @media (max-width: 600px) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+`;
+
+const DashboardHeaderLeft = styled.div`
+  flex-shrink: 0;
+`;
+
+const DashboardAvatar = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  background: #002FA7;
+  color: white;
+  border-radius: 50%;
+  font-weight: bold;
+  font-size: 2rem;
+  box-shadow: 0 4px 12px rgba(0, 47, 167, 0.25);
+  border: 3px solid white;
+`;
+
+const DashboardHeaderRight = styled.div`
+  flex: 1;
+`;
+
+const DashboardTitle = styled.h1`
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--gitthub-black);
+  margin: 0 0 0.25rem 0;
+  line-height: 1.2;
+
+  @media (max-width: 768px) {
+    font-size: 1.75rem;
+  }
+`;
+
+const DashboardSubtitle = styled.p`
+  font-size: 0.95rem;
+  color: var(--gitthub-gray);
+  margin: 0 0 0.5rem 0;
+`;
+
+const UserMetaInfo = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--gitthub-black);
+  font-family: 'IBM Plex Mono', monospace;
+
+  @media (max-width: 600px) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+`;
+
+const UserName = styled.span`
+  font-weight: 600;
+`;
+
+const UserEmail = styled.span`
+  color: var(--gitthub-gray);
+`;
+
+const Separator = styled.span`
+  color: var(--gitthub-gray);
+
+  @media (max-width: 600px) {
+    display: none;
+  }
+`;
+
+// Scorecard Sections
+const ScorecardSection = styled.div`
+  margin-bottom: 2rem;
+`;
+
+const SectionHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+
+  h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--gitthub-black);
+    margin: 0;
+  }
+
+  span {
+    font-size: 0.85rem;
+    color: var(--gitthub-gray);
+    font-weight: 500;
+  }
+`;
+
+const MetricsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+
+  @media (max-width: 968px) {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+
+  @media (max-width: 600px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+`;
+
+const MetricCard = styled.div`
+  background: rgba(255, 255, 255, 0.8);
+  padding: 1.25rem 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: ${props => props.$accent || '#002FA7'};
+  }
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  }
+
+  ${props => props.$placeholder && `
+    opacity: 0.6;
+
+    &::after {
+      content: 'Coming Soon';
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      font-size: 0.65rem;
+      background: #FFA500;
+      color: white;
+      padding: 0.2rem 0.4rem;
+      border-radius: 3px;
+      font-weight: 600;
+    }
+  `}
+`;
+
+const MetricLabel = styled.div`
+  font-size: 0.8rem;
+  color: var(--gitthub-gray);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+`;
+
+const MetricValue = styled.div`
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--gitthub-black);
+  line-height: 1;
+`;
+
+const MetricDescription = styled.div`
+  font-size: 0.75rem;
+  color: var(--gitthub-gray);
+  margin-top: 0.25rem;
+`;
+
+const StatsGrid = styled.div`
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+`;
+
+const StatCard = styled.div`
+  background: rgba(255, 255, 255, 0.5);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+`;
+
+const StatNumber = styled.div`
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--gitthub-black);
+`;
+
+const StatLabel = styled.div`
+  color: var(--gitthub-gray);
+  font-size: 0.875rem;
+  font-weight: 500;
+`;
+
+const InfoGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+`;
+
+const InfoItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  padding: 0.625rem 0.75rem;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  font-size: 0.875rem;
+`;
+
+const InfoLabel = styled.span`
+  font-weight: 600;
+  color: var(--gitthub-gray);
+`;
+
+const InfoValue = styled.span`
+  color: var(--gitthub-black);
+  font-weight: 500;
+`;
+
+const APIKeysSection = styled.div`
+  margin-top: 1.5rem;
+`;
+
+const APIKeyItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.625rem 0.75rem;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+`;
+
+const APIKeyStatus = styled.span`
+  padding: 0.25rem 0.625rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: ${props => props.$configured ? '#d4edda' : '#f8d7da'};
+  color: ${props => props.$configured ? '#155724' : '#721c24'};
+`;
+
+const SignOutButton = styled.button`
+  background: var(--gitthub-black);
+  color: white;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  padding: 0.625rem 1.25rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+  &:hover {
+    background: #2a2a2a;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  &:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+`;
+
+
+// Helper to get initial state from URL params - prevents layout jump on load
+const getInitialState = (searchParams, user) => {
+  const section = searchParams.get('section')
+
+  // If user requests user-profile, show it only if logged in
+  if (section === 'user-profile' && user) {
+    return { activeTab: 'user-profile' }
+  }
+
+  // If a valid section is provided, use it
+  const validSections = ['readme', 'workflows', 'skills', 'tools', 'educational-content', 'curated']
+  if (section && validSections.includes(section)) {
+    return { activeTab: section }
+  }
+
+  // Default to README
+  return { activeTab: 'readme' }
+}
+
+function Docs() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { user, signOut, getUserAttributes } = useAuth()
+
+  // Get initial state from URL params to prevent layout jump
+  const initialState = getInitialState(searchParams, user)
+
+  const [activeSection, setActiveSection] = useState('readme')
+  const [activeTab, setActiveTab] = useState(initialState.activeTab || 'workflows')
+  const [selectedItem, setSelectedItem] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('all')
+  const [selectedArticle, setSelectedArticle] = useState(null)
+  const [userAttributes, setUserAttributes] = useState(null)
+  const [signingOut, setSigningOut] = useState(false)
+
+  // File tree state
+  const [expandedFolders, setExpandedFolders] = useState({
+    magazine: true,
+    campus: true
+  })
+
+  // README folder expanded state - controlled by active section
+  const readmeSubPages = ['readme', 'workflows', 'skills', 'tools']
+  const [readmeExpanded, setReadmeExpanded] = useState(readmeSubPages.includes(initialState.activeTab))
+
+  // Selected user doc for viewing
+  const [selectedUserDoc, setSelectedUserDoc] = useState(null)
+
+  // Bookmarks state
+  const [bookmarks, setBookmarks] = useState([])
+
+  // User Documentation state
+  const [userDocs, setUserDocs] = useState({
+    courses: [],
+    pipelines: [],
+    mcpServers: []
+  })
+
+  // Magazine state
+  const [articles, setArticles] = useState([])
+  const [articleForm, setArticleForm] = useState({
+    title: '',
+    content: '',
+    category: 'article',
+    tags: ''
+  })
+  const [aiGenerating, setAiGenerating] = useState(false)
+
+  // Markdown content state
+  const [readmeContent, setReadmeContent] = useState('')
+  const [workflowsContent, setWorkflowsContent] = useState('')
+  const [skillsContent, setSkillsContent] = useState('')
+  const [toolsContent, setToolsContent] = useState('')
+
+  // Getting Started articles
+  const gettingStartedArticles = [
+    {
+      id: 'getting-started-intro',
+      title: 'Welcome to GitTHub',
+      content: `GitTHub is your comprehensive AI learning platform that combines cutting-edge technology with practical education resources. Built with FastAPI, React, and powered by AWS Bedrock's Claude AI models, GitTHub offers a unique approach to learning and exploring artificial intelligence.
+
+What is GitTHub?
+
+GitTHub is more than just a learning platform - it's an ecosystem designed to help you understand, explore, and apply AI concepts in real-world scenarios. Whether you're a beginner taking your first steps into AI or an experienced developer looking to deepen your knowledge, GitTHub provides the tools and resources you need.
+
+Our platform features:
+- AI-powered course generation using AWS Bedrock Claude models
+- Comprehensive documentation and tutorials
+- Interactive learning resources
+- Curated external links to top learning platforms
+- Real-time AI chat assistance
+
+The platform is structured around three main sections accessible through this documentation hub:
+1. The Doc Page - Your central documentation and learning resource center
+2. The Src Page - Source code and technical implementation details
+3. The Hub Page - Community resources and collaborative learning
+
+GitTHub leverages modern technology including PostgreSQL for data persistence, React for a responsive user interface, and AWS services for scalable AI capabilities. Our goal is to make AI education accessible, practical, and engaging for everyone.
+
+Whether you're here to generate custom AI courses or access curated learning resources, GitTHub provides a comprehensive environment for your AI learning journey.`,
+      excerpt: 'A comprehensive AI learning platform combining cutting-edge technology with practical education resources.',
+      author: 'GitTHub Team',
+      date: '2025-10-04',
+      category: 'Getting Started',
+      tags: ['Introduction', 'Platform', 'AI Learning'],
+      featured: true
+    },
+    {
+      id: 'getting-started-doc',
+      title: 'Understanding the Doc Page',
+      content: `The Doc Page is your central hub for all learning materials and documentation on GitTHub. This comprehensive resource center is designed to provide easy access to educational resources and curated content.
+
+What You'll Find Here:
+
+Getting Started (this section)
+Your entry point to GitTHub, featuring essential guides to help you navigate the platform effectively. Start here to understand how GitTHub works and how to make the most of its features.
+
+Education
+A curated collection of tutorials, documentation, and guides. These resources cover everything from AI fundamentals to advanced web development practices.
+
+Navigation Features:
+
+The Doc Page includes a file tree navigation system on the left, allowing you to quickly jump between sections. If you're logged in, you can bookmark articles and resources for easy access later. The bookmarks appear in the sidebar, letting you build your own personalized learning path.
+
+The interface is designed with clarity in mind - each section is clearly separated, and articles are presented in a clean, readable format inspired by modern documentation sites. Whether you're browsing on desktop or mobile, the Doc Page adapts to provide an optimal reading experience.`,
+      excerpt: 'Your central hub for learning materials, documentation, and curated educational resources.',
+      author: 'GitTHub Team',
+      date: '2025-10-04',
+      category: 'Documentation',
+      tags: ['Doc Page', 'Navigation', 'Resources']
+    },
+    {
+      id: 'getting-started-src',
+      title: 'Exploring the Src Page',
+      content: `The Src Page provides deep insights into the technical implementation of GitTHub, offering transparency into how the platform works and giving developers a chance to learn from real-world code architecture.
+
+What the Src Page Offers:
+
+Technical Architecture
+Explore the full-stack implementation of GitTHub, from the FastAPI backend to the React frontend. See how we integrate AWS Bedrock for AI capabilities, manage PostgreSQL databases, and structure our code for scalability and maintainability.
+
+Code Examples
+Browse through actual implementation details including:
+- API endpoint structures and routing patterns
+- React component architecture and state management
+- Database schema and ORM usage
+- AWS Bedrock integration patterns
+- Authentication and authorization flows
+
+Best Practices
+Learn from our implementation choices. The codebase demonstrates modern development practices including:
+- Domain-driven design in the backend
+- Component-based architecture in React
+- Dependency injection for testability
+- Graceful degradation for resilience
+- Environment-based configuration management
+
+For Developers:
+
+If you're a developer, the Src Page is invaluable for understanding how to build production-grade AI applications. You'll see how we:
+- Structure a FastAPI application with multiple domains
+- Integrate AWS Bedrock Claude models for AI generation
+- Manage database connections with proper pooling
+- Handle authentication with both PostgreSQL and AWS Cognito
+- Build responsive React interfaces with styled-components
+
+For Learners:
+
+Even if you're not planning to dive into code immediately, the Src Page helps you understand what happens behind the scenes when you use GitTHub's features. This transparency supports your learning journey by demystifying how AI applications work in practice.`,
+      excerpt: 'Technical implementation details, code architecture, and development best practices powering GitTHub.',
+      author: 'GitTHub Team',
+      date: '2025-10-04',
+      category: 'Technical',
+      tags: ['Source Code', 'Architecture', 'Development']
+    },
+    {
+      id: 'getting-started-hub',
+      title: 'Discovering the Hub Page',
+      content: `The Hub Page is GitTHub's community and collaboration center, where learning resources meet practical application. This section focuses on interactive features and community-driven content.
+
+Key Features:
+
+AI Course Generation
+The Hub Page provides access to GitTHub's core AI course generation capabilities powered by AWS Bedrock. You can:
+- Generate custom courses on any topic using Claude AI models
+- Specify learning levels from beginner to advanced
+- Customize course structure and content depth
+- Save and track your generated courses
+
+Course Library
+Browse through a collection of AI-generated courses covering various topics. Each course is structured with clear learning objectives, detailed content, and practical examples. The library grows as users generate new courses, creating a diverse knowledge base.
+
+DataBank Integration
+Access the comprehensive DataBank directly from the Hub Page. The DataBank contains:
+- Curated learning resources
+- Tutorials and documentation
+- Links to external educational content
+- Community-contributed materials
+
+Interactive Learning
+The Hub Page emphasizes hands-on learning:
+- Real-time AI chat for instant answers to your questions
+- Course viewing with progress tracking
+- Resource exploration with filtering and search
+- Bookmark functionality for personalized learning paths
+
+Community Aspects:
+
+While GitTHub is currently focused on individual learning, the Hub Page is designed with future community features in mind. The infrastructure supports:
+- Sharing generated courses
+- Collaborative learning paths
+- Resource recommendations
+- Discussion and feedback (planned features)
+
+Making the Most of the Hub:
+
+Start by exploring the Course Library to see what's possible. Try generating a course on a topic you're interested in. Use the chat feature when you have questions. Bookmark resources and courses that align with your learning goals. The Hub Page is designed to be your active workspace within GitTHub, complementing the informational focus of the Doc Page and the technical details of the Src Page.`,
+      excerpt: 'Community center for AI course generation, course library, and interactive learning features.',
+      author: 'GitTHub Team',
+      date: '2025-10-04',
+      category: 'Features',
+      tags: ['Hub Page', 'Courses', 'Community', 'AI Generation']
+    }
+  ]
+
+  // Education articles
+  const educationArticles = [
+    {
+      id: 'edu-article-1',
+      title: 'Getting Started with AI and Machine Learning',
+      content: `Your comprehensive beginner's guide to understanding artificial intelligence and machine learning.
+
+What is AI and ML?
+
+Artificial Intelligence (AI) refers to computer systems capable of performing tasks that typically require human intelligence, such as visual perception, speech recognition, decision-making, and language translation. Machine Learning (ML) is a subset of AI focused on building systems that learn and improve from experience without being explicitly programmed.
+
+Core Concepts for Beginners
+
+Supervised Learning: The algorithm learns from labeled training data. Think of it as learning with a teacher - you're given examples with correct answers, and the algorithm learns to map inputs to outputs. Common applications include image classification, spam detection, and price prediction.
+
+Unsupervised Learning: The algorithm finds patterns in unlabeled data. This is like exploring data without a guide, discovering hidden structures and relationships. Applications include customer segmentation, anomaly detection, and recommendation systems.
+
+Neural Networks: Inspired by biological brains, neural networks consist of interconnected nodes (neurons) that process information in layers. They're particularly powerful for complex pattern recognition tasks like image and speech processing.
+
+Training and Testing: ML models are trained on one dataset and tested on another to ensure they generalize well to new, unseen data. This prevents overfitting - when a model memorizes training data but fails on new examples.
+
+Getting Started: Practical Steps
+
+1. Learn Python: Most ML work is done in Python. Start with basic syntax, data structures, and libraries like NumPy and Pandas.
+
+2. Understand Mathematics: Basic linear algebra, calculus, probability, and statistics form the foundation of ML algorithms.
+
+3. Practice with Datasets: Work with real data from platforms like Kaggle, UCI Machine Learning Repository, or Google Dataset Search.
+
+4. Start Simple: Begin with straightforward algorithms like linear regression before moving to complex deep learning models.
+
+5. Use GitTHub Resources: Leverage our curated tutorials, AI-generated courses, and research articles to guide your learning.
+
+Essential Tools and Libraries
+
+- NumPy: Numerical computing with arrays and matrices
+- Pandas: Data manipulation and analysis
+- Scikit-learn: Classical machine learning algorithms
+- TensorFlow/PyTorch: Deep learning frameworks
+- Jupyter Notebooks: Interactive coding environment
+
+Common Pitfalls to Avoid
+
+Don't skip the fundamentals. Understanding the underlying mathematics and algorithms is crucial for effective ML work.
+
+Avoid dataset bias. Always examine your training data for representative samples and potential biases.
+
+Start small. Master simple concepts before tackling complex problems.
+
+Your Learning Path
+
+GitTHub offers multiple resources to support your AI/ML journey:
+- Generate customized courses at your skill level
+- Read research articles for deeper understanding
+- Explore curated learning platforms
+- Practice with real-world examples and tutorials
+
+The field of AI and ML is vast and exciting. Take it one step at a time, practice consistently, and don't hesitate to ask questions. Welcome to the world of artificial intelligence!`,
+      excerpt: 'A comprehensive beginner\'s guide to AI and ML concepts, practical steps for getting started, and essential tools for your learning journey.',
+      author: 'Education Team',
+      date: '2025-10-04',
+      category: 'Tutorial',
+      tags: ['AI', 'Machine Learning', 'Beginner', 'Tutorial']
+    },
+    {
+      id: 'edu-article-2',
+      title: 'Web Development Fundamentals',
+      content: `Master the core technologies that power the modern web: HTML, CSS, and JavaScript.
+
+The Web Development Trinity
+
+Every website you visit is built on three foundational technologies working in harmony. Understanding these fundamentals is essential for any aspiring web developer.
+
+HTML: The Structure
+
+HTML (HyperText Markup Language) provides the structure and content of web pages. Think of it as the skeleton of a website.
+
+Key Concepts:
+- Elements and Tags: The building blocks of HTML (<div>, <p>, <h1>, etc.)
+- Semantic HTML: Using meaningful tags that describe content (<article>, <nav>, <header>)
+- Forms and Input: Collecting user data with forms, inputs, and buttons
+- Accessibility: Making websites usable for everyone, including those using assistive technologies
+
+Best Practices:
+- Use semantic HTML for better SEO and accessibility
+- Structure documents logically with proper heading hierarchy
+- Include alt text for images
+- Validate HTML to ensure browser compatibility
+
+CSS: The Styling
+
+CSS (Cascading Style Sheets) controls the visual presentation and layout of web pages. It's the skin and clothing that makes the skeleton look beautiful.
+
+Core Concepts:
+- Selectors: Targeting HTML elements for styling
+- Box Model: Understanding margin, border, padding, and content
+- Flexbox and Grid: Modern layout systems for responsive design
+- Colors and Typography: Creating visual hierarchy and brand identity
+- Responsive Design: Adapting layouts for different screen sizes
+
+Modern CSS Features:
+- CSS Variables (Custom Properties) for maintainable code
+- CSS Grid for complex two-dimensional layouts
+- Flexbox for one-dimensional layouts and alignment
+- Media Queries for responsive breakpoints
+- Animations and Transitions for interactive feedback
+
+JavaScript: The Behavior
+
+JavaScript brings websites to life with interactivity and dynamic content. It's the muscles that make everything move and respond.
+
+Fundamentals:
+- Variables and Data Types: Storing and manipulating information
+- Functions: Reusable blocks of code
+- DOM Manipulation: Interacting with HTML elements
+- Events: Responding to user actions (clicks, typing, scrolling)
+- Async Programming: Handling operations that take time (API calls, file loading)
+
+Modern JavaScript (ES6+):
+- Arrow Functions for concise syntax
+- Destructuring for cleaner code
+- Promises and Async/Await for asynchronous operations
+- Modules for code organization
+- Template Literals for dynamic strings
+
+Learning Path
+
+1. Start with HTML: Build simple pages to understand structure
+2. Add CSS: Make those pages beautiful and responsive
+3. Introduce JavaScript: Add interactivity and dynamic features
+4. Practice Together: Build complete projects using all three
+
+Practical Projects to Try
+
+- Personal Portfolio: Showcase your work and skills
+- Todo List App: Practice JavaScript DOM manipulation
+- Responsive Blog: Master CSS layouts and media queries
+- Form Validation: Handle user input with JavaScript
+- API Integration: Fetch and display data from external sources
+
+Essential Tools
+
+- Browser DevTools: Chrome/Firefox developer tools for debugging
+- VS Code: Popular code editor with excellent web development support
+- Git: Version control for tracking changes
+- npm: Package manager for JavaScript libraries
+- Responsive Design Mode: Test layouts on different screen sizes
+
+Resources on GitTHub
+
+Generate courses on specific topics like "CSS Grid Mastery" or "JavaScript ES6 Features." Explore our curated links to platforms like MDN Web Docs for comprehensive references.
+
+The Journey Ahead
+
+Web development is a constantly evolving field. Once you master these fundamentals, you can explore frameworks like React, Vue, or Angular. But remember: frameworks come and go, fundamentals last forever.
+
+Start building today, experiment often, and never stop learning!`,
+      excerpt: 'Comprehensive guide to HTML, CSS, and JavaScript - the three fundamental technologies powering every website on the internet.',
+      author: 'Education Team',
+      date: '2025-10-03',
+      category: 'Tutorial',
+      tags: ['Web Development', 'HTML', 'CSS', 'JavaScript', 'Frontend']
+    },
+    {
+      id: 'edu-article-3',
+      title: 'Python for Data Science',
+      content: `Learn Python programming with a focus on data analysis, visualization, and scientific computing.
+
+Why Python for Data Science?
+
+Python has become the dominant language in data science for good reasons: it's easy to learn, has powerful libraries, and enjoys massive community support. Whether you're analyzing datasets, building machine learning models, or creating visualizations, Python provides the tools you need.
+
+Python Basics for Data Science
+
+Before diving into data science libraries, ensure you're comfortable with:
+
+Core Python:
+- Variables, data types, and operations
+- Lists, dictionaries, sets, and tuples
+- Control flow (if/else, loops)
+- Functions and lambda expressions
+- List comprehensions
+- File I/O operations
+
+Object-Oriented Programming:
+- Classes and objects
+- Inheritance and polymorphism
+- Methods and attributes
+- Understanding Python's data model
+
+Essential Data Science Libraries
+
+NumPy: Numerical Python
+
+NumPy provides support for large, multi-dimensional arrays and matrices, along with mathematical functions to operate on them.
+
+Key Features:
+- ndarray: Efficient multi-dimensional arrays
+- Broadcasting: Operations on arrays of different shapes
+- Linear algebra operations
+- Random number generation
+- Fast mathematical operations
+
+Common Operations:
+- Array creation and manipulation
+- Mathematical and statistical operations
+- Array indexing and slicing
+- Reshaping and stacking arrays
+
+Pandas: Data Manipulation and Analysis
+
+Pandas is built on NumPy and provides high-level data structures like DataFrames for working with structured data.
+
+Core Concepts:
+- Series: One-dimensional labeled arrays
+- DataFrame: Two-dimensional labeled data structure
+- Index: Axis labels for Series and DataFrames
+- GroupBy: Split-apply-combine operations
+
+Essential Operations:
+- Reading data (CSV, Excel, JSON, SQL databases)
+- Data cleaning and preprocessing
+- Filtering and selecting data
+- Merging and joining datasets
+- Aggregation and grouping
+- Handling missing values
+
+Matplotlib and Seaborn: Data Visualization
+
+Visualizing data is crucial for understanding patterns and communicating insights.
+
+Matplotlib:
+- Line plots, scatter plots, and bar charts
+- Histograms and distributions
+- Customizing plots (colors, labels, legends)
+- Subplots for multiple visualizations
+- Saving figures for publication
+
+Seaborn:
+- Statistical visualizations
+- Distribution plots
+- Categorical data plots
+- Heatmaps and correlation matrices
+- Beautiful default styles
+
+Scikit-learn: Machine Learning
+
+Scikit-learn provides simple and efficient tools for machine learning.
+
+Key Components:
+- Preprocessing: Scaling, encoding, and transforming data
+- Model Selection: Train/test splitting, cross-validation
+- Supervised Learning: Classification and regression algorithms
+- Unsupervised Learning: Clustering and dimensionality reduction
+- Model Evaluation: Metrics and scoring functions
+
+Typical Workflow
+
+1. Import Libraries and Load Data
+   import pandas as pd
+   import numpy as np
+   import matplotlib.pyplot as plt
+
+2. Explore and Clean Data
+- Check data types and missing values
+- Handle duplicates and outliers
+- Transform and encode features
+
+3. Analyze and Visualize
+- Compute statistics
+- Create visualizations
+- Identify patterns and relationships
+
+4. Model and Predict (if applicable)
+- Split data into train/test sets
+- Train machine learning models
+- Evaluate and refine models
+
+Best Practices
+
+Write Readable Code: Use meaningful variable names and add comments
+Use Vectorized Operations: Avoid loops when possible, use NumPy/Pandas operations
+Handle Errors: Use try/except blocks for robust code
+Document Your Work: Jupyter notebooks are great for combining code, visualizations, and explanations
+Version Control: Use Git to track your analysis and experiments
+
+Learning Resources on GitTHub
+
+Generate targeted courses on topics like:
+- "NumPy Fundamentals for Data Science"
+- "Pandas Data Manipulation Masterclass"
+- "Data Visualization with Matplotlib and Seaborn"
+- "Machine Learning with Scikit-learn"
+
+Practice Projects
+
+Start with these hands-on projects:
+- Exploratory Data Analysis on a dataset of your choice
+- Sales data analysis and visualization
+- Customer segmentation using clustering
+- Predictive modeling (price prediction, classification)
+- Time series analysis and forecasting
+
+The Path Forward
+
+Python for data science is a skill that opens many doors. Start with the basics, practice with real datasets, and gradually tackle more complex projects. GitTHub's AI course generation can create customized learning paths as you progress.
+
+Remember: the best way to learn data science is by doing data science. Download a dataset that interests you and start exploring today!`,
+      excerpt: 'Introduction to Python for data analysis, covering NumPy, Pandas, Matplotlib, and essential data science workflows.',
+      author: 'Education Team',
+      date: '2025-10-02',
+      category: 'Tutorial',
+      tags: ['Python', 'Data Science', 'NumPy', 'Pandas', 'Analysis']
+    },
+    {
+      id: 'edu-article-4',
+      title: 'How to Learn Programming Effectively',
+      content: `Evidence-based strategies and techniques for mastering programming and computer science concepts.
+
+The Science of Learning to Code
+
+Learning to program is different from other forms of learning. It requires a unique combination of conceptual understanding, problem-solving skills, and hands-on practice. Research in educational psychology offers valuable insights into how to learn programming effectively.
+
+Effective Learning Strategies
+
+Active Learning Over Passive Consumption
+
+Don't just watch tutorials or read documentation passively. Active engagement is crucial:
+
+- Write code along with tutorials, don't just watch
+- Modify example code to see what happens
+- Explain concepts in your own words
+- Teach what you've learned to others (even imaginary ones)
+- Create your own mini-projects to apply new concepts
+
+The Testing Effect
+
+Regular self-testing dramatically improves retention and understanding:
+
+- Quiz yourself on concepts without looking at notes
+- Explain how code works before running it
+- Predict output before executing code
+- Write code from memory, then check correctness
+- Use spaced repetition for important concepts
+
+Deliberate Practice
+
+Random coding isn't enough. Deliberate practice focuses on specific skills just beyond your current ability:
+
+- Identify specific weaknesses (e.g., recursion, debugging, algorithms)
+- Practice those areas intentionally
+- Seek immediate feedback on your code
+- Gradually increase complexity
+- Track your progress and adjust focus areas
+
+Interleaving and Spacing
+
+Don't study one topic until perfection before moving on. Mix related topics and space out your practice:
+
+- Alternate between different but related topics
+- Review previously learned material regularly
+- Space practice sessions over days and weeks, not hours
+- Solve problems that require combining multiple concepts
+
+Building Mental Models
+
+Understanding Over Memorization
+
+Focus on building accurate mental models of how things work:
+
+- Understand WHY code works, not just THAT it works
+- Connect new concepts to things you already know
+- Draw diagrams of program flow and data structures
+- Explain complex concepts using analogies
+- Question your assumptions and test edge cases
+
+The Debugging Mindset
+
+Debugging is a critical skill that improves all aspects of programming:
+
+- Read error messages carefully and completely
+- Form hypotheses about what's wrong
+- Test hypotheses systematically
+- Use print statements and debuggers
+- Keep a "bug journal" to learn from mistakes
+
+Practical Strategies
+
+Project-Based Learning
+
+Build real projects that interest you:
+
+- Start with small, achievable projects
+- Gradually increase complexity
+- Combine multiple concepts in single projects
+- Showcase completed projects in a portfolio
+- Learn new concepts as needed for your projects
+
+Code Reading
+
+Read other people's code to learn different approaches:
+
+- Study well-written open-source projects
+- Analyze code solutions to problems you've solved
+- Join code review processes
+- Compare your solutions with others
+- Learn idiomatic patterns and best practices
+
+The 20-Minute Rule
+
+When stuck on a problem:
+
+- Spend 20 minutes trying to solve it yourself
+- Use documentation and search for information
+- Break the problem into smaller parts
+- After 20 minutes, if still stuck, ask for help
+- Document what you tried and why it didn't work
+
+Common Pitfalls to Avoid
+
+Tutorial Hell: Don't endlessly watch tutorials without building things
+Learning Too Many Things: Master fundamentals before jumping to frameworks
+Skipping Fundamentals: Strong basics make advanced topics easier
+Fear of Asking Questions: Everyone was a beginner once
+Comparing to Others: Focus on your own progress, not others' pace
+
+Creating a Sustainable Learning Routine
+
+Daily Consistency
+
+- 30-60 minutes of focused coding daily beats 8-hour weekend marathons
+- Establish a dedicated time and space for learning
+- Set specific, achievable daily goals
+- Track your coding streak to maintain motivation
+
+Strategic Goal Setting
+
+- Set specific, measurable learning goals
+- Break large goals into smaller milestones
+- Celebrate small wins along the way
+- Adjust goals based on progress and interests
+
+Managing Cognitive Load
+
+- Learn one major concept at a time
+- Take regular breaks (Pomodoro Technique works well)
+- Sleep is crucial for memory consolidation
+- Exercise and healthy habits support cognitive function
+
+Leveraging GitTHub Resources
+
+Use GitTHub's features strategically:
+
+- Generate customized courses matching your current level
+- Bookmark articles and resources for spaced review
+- Explore research articles for deeper understanding
+- Use curated links to find high-quality external resources
+- Create learning paths combining multiple topics
+
+The Growth Mindset
+
+Believe that programming ability can be developed through dedication and hard work. Every expert was once a beginner. Every "talented" programmer has spent thousands of hours practicing.
+
+Embrace challenges as opportunities to grow. View failures as learning experiences. Celebrate progress, not perfection.
+
+Your Learning Journey
+
+Programming is a marathon, not a sprint. Be patient with yourself, stay curious, and keep building. The path from beginner to proficient developer is well-worn and achievable for anyone willing to put in consistent effort.
+
+Start today, code every day, and watch your skills compound over time.`,
+      excerpt: 'Evidence-based strategies for effective programming education, covering active learning, deliberate practice, and sustainable learning habits.',
+      author: 'Education Team',
+      date: '2025-10-01',
+      category: 'Guide',
+      tags: ['Learning', 'Study Techniques', 'Programming', 'Education']
+    },
+    {
+      id: 'edu-article-5',
+      title: 'Maximizing GitTHub for Your Learning Journey',
+      content: `A comprehensive guide to leveraging every feature of GitTHub to accelerate your AI and programming education.
+
+Welcome to Your Learning Platform
+
+GitTHub is designed to be your comprehensive AI learning companion. This guide will help you extract maximum value from every feature, creating an optimized, personalized learning experience.
+
+AI Course Generation: Your Personal Curriculum Designer
+
+The Power of Custom Courses
+
+GitTHub's AI course generation is powered by Claude 4 Sonnet, one of the most advanced AI models available. Here's how to use it effectively:
+
+Be Specific: Instead of "teach me Python," try "teach me Python data structures and algorithms for technical interviews at an intermediate level."
+
+Specify Your Level: Always indicate whether you're a beginner, intermediate, or advanced learner. The AI adapts content complexity accordingly.
+
+Set Clear Objectives: Mention what you want to achieve. "I want to build a web scraper" generates different content than "I want to understand web scraping principles."
+
+Iterate and Refine: If a generated course isn't quite right, generate another with adjusted parameters. Each course is unique and tailored to your specific request.
+
+Course Management Strategies
+
+- Save all generated courses for future reference
+- Generate multiple courses on the same topic from different angles
+- Use courses as structured roadmaps for learning
+- Come back to courses periodically for review
+- Share particularly good courses with friends (coming soon)
+
+The Documentation Hub: Your Knowledge Base
+
+README Section
+
+Use this as your quick reference guide:
+- Understand platform capabilities
+- Learn navigation shortcuts
+- Discover features you might have missed
+- Share with newcomers to help them get started
+
+Education Section
+
+Leverage curated resources:
+- Start with foundational articles
+- Progress to advanced topics
+- Use resource cards for tutorials and guides
+- Explore external platforms via curated links
+- Combine GitTHub content with external resources
+
+Bookmarks: Building Your Personal Library
+
+Strategic Bookmarking
+
+Bookmarks are powerful when used intentionally:
+
+Create Learning Paths: Bookmark articles in logical order for specific learning goals
+Quick Reference: Save articles you'll need to reference frequently
+Review Queue: Bookmark content for spaced repetition review
+Project Resources: Collect resources for specific projects you're working on
+
+Bookmark Organization Strategy
+
+- Revisit bookmarks weekly
+- Remove bookmarks once content is mastered
+- Add notes about why you bookmarked something
+- Use bookmarks to track learning progress
+
+The DataBank: Resource Discovery
+
+Finding the Right Resources
+
+The DataBank contains curated tutorials, documentation, and guides:
+
+Use Filters: Narrow down by type, category, or topic
+Search Effectively: Use specific keywords for better results
+Explore Tags: Discover related resources through tags
+Save Valuable Resources: Bookmark resources you'll use repeatedly
+
+Integration with Learning
+
+- Use DataBank resources to supplement AI-generated courses
+- Find practical tutorials for hands-on practice
+- Discover official documentation for technologies you're learning
+- Explore different learning formats (videos, text, interactive)
+
+Stack Builder: Understanding Architecture
+
+Learning Through Visualization
+
+The Stack Builder isn't just a planning tool—it's a learning aid:
+
+Explore Templates: See how real applications are structured
+Understand Relationships: Learn which technologies work well together
+Plan Learning Paths: Identify which technologies to learn next
+Document Your Projects: Create and save technology stacks for reference
+
+Effective Usage
+
+- Start with templates that match your interests
+- Research unfamiliar technologies in the stack
+- Understand why specific technologies are chosen
+- Build stacks for projects you want to create
+- Use stacks to guide your learning priorities
+
+Creating Your Personal Learning System
+
+Weekly Learning Routine
+
+Monday: Plan the week, generate a new course or choose learning topics
+Tuesday-Thursday: Active learning and practice
+Friday: Review and consolidate the week's learning
+Weekend: Build projects applying new knowledge
+
+Monthly Review Process
+
+1. Review all bookmarked content
+2. Assess progress on learning goals
+3. Generate courses for next month's focus areas
+4. Clean up bookmarks and organize resources
+5. Update learning goals based on progress
+
+Combining Features for Maximum Impact
+
+Example Learning Workflow:
+
+1. Generate an AI course on your chosen topic
+2. Read related research articles for depth
+3. Find tutorials in DataBank for hands-on practice
+4. Use Stack Builder to see how technology fits in context
+5. Bookmark important resources for review
+6. Build a project applying what you've learned
+7. Generate a new course on related advanced topics
+
+Tracking Progress
+
+Use Multiple Indicators:
+- Courses completed and generated
+- Articles read and bookmarked
+- Projects built and documented
+- Concepts mastered and applied
+- Skills acquired and validated
+
+Advanced Tips and Tricks
+
+Course Generation Power User Tips:
+- Generate courses on the same topic at different levels to see progression
+- Create courses for different learning styles (theoretical vs. practical)
+- Use courses to preview topics before deep study
+- Generate refresher courses on previously learned topics
+
+Documentation Strategies:
+- Read NEWS section weekly for updates
+- Systematically work through education articles
+- Use research articles to supplement course learning
+- Cross-reference between different sections
+
+Bookmark Management:
+- Use descriptive mental notes when bookmarking
+- Create themed bookmark collections
+- Regularly review and cull outdated bookmarks
+- Export bookmarks periodically (when feature available)
+
+Getting Help and Support
+
+When You're Stuck:
+- Search documentation first
+- Generate a targeted course on the confusing topic
+- Check education section for guides
+- Use external resources via curated links
+
+Feature Requests and Feedback:
+- Your input shapes GitTHub's future
+- Report bugs or issues promptly
+- Suggest features that would improve learning
+- Share success stories
+
+Conclusion
+
+GitTHub provides a comprehensive ecosystem for learning AI and programming. By strategically using AI course generation, documentation, bookmarks, DataBank, and Stack Builder together, you create a personalized, effective learning environment that adapts to your needs.
+
+Start today: generate your first course, bookmark this guide, and begin building your knowledge systematically. Your future self will thank you for the investment in learning you make today.
+
+Happy learning!`,
+      excerpt: 'Complete guide to using every GitTHub feature effectively, from AI course generation to bookmarks, creating your optimal learning system.',
+      author: 'GitTHub Team',
+      date: '2025-09-29',
+      category: 'Guide',
+      tags: ['GitTHub', 'Platform', 'Learning', 'Tutorial', 'Features']
+    }
+  ]
+
+  // Campus state
+  const [campusResources, setCampusResources] = useState([])
+  const resourceCategories = ['all', 'tutorials', 'documentation', 'guides', 'videos']
+
+  // Toggle folder expansion
+  const toggleFolder = (folder) => {
+    setExpandedFolders(prev => ({
+      ...prev,
+      [folder]: !prev[folder]
+    }))
+  }
+
+  // NavigationLayout handlers
+  const handleSectionChange = (section) => {
+    // Map section to activeTab
+    setActiveSection('readme'); // Always 'readme' for Docs
+    setActiveTab(section);
+    navigate(`/doc?section=${section}`);
+  };
+
+  const handleItemSelect = (type, item) => {
+    setSelectedItem(item);
+  };
+
+  // Helper function to render right pane content
+  const renderRightPane = () => {
+    return (
+      <MainContentArea>
+        <ContentArea>
+          {success && <SuccessMessage>{success}</SuccessMessage>}
+          {/* Content sections will be added here */}
+        </ContentArea>
+      </MainContentArea>
+    );
+  };
+
+  // Handle README folder click - navigate to README
+  const handleReadmeClick = () => {
+    // Navigate to README content
+    setActiveTab('readme')
+    navigate('/doc?section=readme')
+  }
+
+  // Handle user profile click - navigate to profile
+  const handleUserProfileClick = () => {
+    setActiveSubPage('user-profile')
+    // Fetch user attributes when profile is opened
+    if (user && activeTab !== 'user-profile') {
+      fetchUserAttributes()
+    }
+  }
+
+  // Navigate to section
+  const navigateToPage = (subPage) => {
+    setActiveSubPage(subPage)
+  }
+
+  // Fetch user attributes
+  const fetchUserAttributes = async () => {
+    try {
+      if (user && getUserAttributes) {
+        const attributes = await getUserAttributes()
+        setUserAttributes(attributes)
+      }
+    } catch (err) {
+      console.error('Failed to load user attributes:', err)
+    }
+  }
+
+  // Helper functions for user display
+  const getUserInitial = () => {
+    if (userAttributes?.name) {
+      return userAttributes.name.charAt(0).toUpperCase()
+    }
+    if (userAttributes?.email) {
+      return userAttributes.email.charAt(0).toUpperCase()
+    }
+    if (user?.email) {
+      return user.email.charAt(0).toUpperCase()
+    }
+    return '?'
+  }
+
+  const getUserName = () => {
+    return userAttributes?.name || user?.email || userAttributes?.email || 'User'
+  }
+
+  // Calculate member since duration
+  const getMemberSinceDuration = () => {
+    if (!user?.created_at) return 'N/A'
+
+    const created = new Date(user.created_at)
+    const now = new Date()
+    const diffTime = Math.abs(now - created)
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+    if (diffDays < 30) return `${diffDays} days`
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)} months`
+    return `${Math.floor(diffDays / 365)} years`
+  }
+
+  // Calculate total documents
+  const getTotalDocuments = () => {
+    return userDocs.courses.length +
+           userDocs.pipelines.length +
+           userDocs.mcpServers.length
+  }
+
+  // Handle sign out
+  const handleSignOut = async () => {
+    try {
+      setSigningOut(true)
+      await signOut()
+      navigate('/')
+    } catch (err) {
+      console.error('Failed to sign out:', err)
+    } finally {
+      setSigningOut(false)
+    }
+  }
+
+  // Window control button handlers
+  const handleCloseWindow = async () => {
+    // Red button - Logout
+    await handleSignOut()
+  }
+
+  const handleMinimizeWindow = () => {
+    // Yellow button - Go to hub
+    navigate('/hub')
+  }
+
+  const handleMaximizeWindow = () => {
+    // Green button - Go to hub
+    navigate('/hub')
+  }
+
+  // Fetch user attributes when profile is shown
+  useEffect(() => {
+    if (activeTab === 'user-profile' && user && getUserAttributes) {
+      fetchUserAttributes()
+    }
+  }, [activeTab, user])
+
+  // Curated external links
+  const curatedLinks = [
+    {
+      title: 'Anthropic Academy',
+      description: 'Learn about Claude AI, prompt engineering, and AI safety from Anthropic',
+      url: 'https://www.anthropic.com/research',
+      icon: '🎓'
+    },
+    {
+      title: 'DataCamp',
+      description: 'Interactive data science and analytics courses',
+      url: 'https://www.datacamp.com',
+      icon: '📊'
+    },
+    {
+      title: 'YouTube Tech Tutorials',
+      description: 'Curated playlist of programming and AI tutorials',
+      url: 'https://www.youtube.com/@freecodecamp',
+      icon: '📺'
+    },
+    {
+      title: 'MDN Web Docs',
+      description: 'Comprehensive web development documentation',
+      url: 'https://developer.mozilla.org',
+      icon: '📚'
+    },
+    {
+      title: 'Fast.ai',
+      description: 'Free practical deep learning courses',
+      url: 'https://www.fast.ai',
+      icon: '🤖'
+    },
+    {
+      title: 'GitHub Learning Lab',
+      description: 'Learn GitHub, Git, and software development practices',
+      url: 'https://skills.github.com',
+      icon: '💻'
+    }
+  ]
+
+  // Auto-expand README folder when navigating to a README sub-page (but don't auto-collapse)
+  useEffect(() => {
+    const isReadmeSection = readmeSubPages.includes(activeTab)
+    if (isReadmeSection) {
+      setReadmeExpanded(true)
+    }
+    // Note: We don't auto-collapse when leaving README sections - user controls collapse manually
+  }, [activeTab])
+
+  useEffect(() => {
+    // Load saved articles from localStorage
+    const savedArticles = localStorage.getItem('magazineArticles')
+    if (savedArticles) {
+      setArticles(JSON.parse(savedArticles))
+    }
+
+    // Load bookmarks from localStorage
+    const savedBookmarks = localStorage.getItem('userBookmarks')
+    if (savedBookmarks) {
+      setBookmarks(JSON.parse(savedBookmarks))
+    }
+
+    // Load user documentation from localStorage
+    const savedUserDocs = localStorage.getItem('userDocs')
+    if (savedUserDocs) {
+      setUserDocs(JSON.parse(savedUserDocs))
+    } else {
+      // Sample data for demonstration
+      const sampleDocs = {
+        courses: [
+          { id: 'course-1', title: 'Python for Beginners.md' },
+          { id: 'course-2', title: 'Advanced React Patterns.md' }
+        ],
+        pipelines: [
+          { id: 'pipeline-1', title: 'Data Processing Pipeline.md' }
+        ],
+        mcpServers: [
+          { id: 'mcp-1', title: 'Custom MCP Server Config.md' }
+        ]
+      }
+      setUserDocs(sampleDocs)
+      localStorage.setItem('userDocs', JSON.stringify(sampleDocs))
+    }
+
+    // Fetch markdown content for docs pages
+    fetch('/content/docs/README.md')
+      .then(response => response.text())
+      .then(text => setReadmeContent(text))
+      .catch(error => console.error('Error loading README:', error))
+
+    fetch('/content/docs/workflows.md')
+      .then(response => response.text())
+      .then(text => setWorkflowsContent(text))
+      .catch(error => console.error('Error loading workflows:', error))
+
+    fetch('/content/docs/skills.md')
+      .then(response => response.text())
+      .then(text => setSkillsContent(text))
+      .catch(error => console.error('Error loading skills:', error))
+
+    fetch('/content/docs/tools.md')
+      .then(response => response.text())
+      .then(text => setToolsContent(text))
+      .catch(error => console.error('Error loading tools:', error))
+
+    // Fetch campus resources on mount
+    fetchCampusResources()
+  }, [])
+
+  // Clear selected article when changing pages
+  useEffect(() => {
+    setSelectedArticle(null)
+  }, [activeTab])
+
+  const addBookmark = (item) => {
+    const bookmark = {
+      id: item.id,
+      title: item.title,
+      subPage: activeTab
+    }
+
+    const updatedBookmarks = [...bookmarks, bookmark]
+    setBookmarks(updatedBookmarks)
+    localStorage.setItem('userBookmarks', JSON.stringify(updatedBookmarks))
+    setSuccess('Bookmark added!')
+    setTimeout(() => setSuccess(null), 2000)
+  }
+
+  const removeBookmark = (bookmarkId) => {
+    const updatedBookmarks = bookmarks.filter(b => b.id !== bookmarkId)
+    setBookmarks(updatedBookmarks)
+    localStorage.setItem('userBookmarks', JSON.stringify(updatedBookmarks))
+  }
+
+  const navigateToBookmark = (bookmark) => {
+    setActiveSubPage(bookmark.subPage)
+  }
+
+  const fetchCampusResources = async () => {
+    setLoading(true)
+    try {
+      const response = await axios.get(`${API_URL}/api/v1/databank/resources`, {
+        params: { limit: 20 }
+      })
+
+      const resources = response.data.resources?.map(resource => ({
+        id: resource.id,
+        title: resource.title,
+        description: resource.description,
+        type: resource.resource_type === 'link' ? 'Tutorial' : 'Documentation',
+        category: resource.category || 'general',
+        tags: resource.tags || [],
+        url: resource.external_url || resource.file_url,
+        format: resource.format
+      })) || []
+
+      // Add mock resources for educational content
+      const mockResources = [
+        {
+          id: 'edu-1',
+          title: 'Introduction to AI and Machine Learning',
+          description: 'A beginner-friendly guide to understanding AI concepts, machine learning basics, and practical applications.',
+          type: 'Tutorial',
+          category: 'tutorials',
+          tags: ['AI', 'ML', 'Beginner'],
+        },
+        {
+          id: 'edu-2',
+          title: 'Web Development Fundamentals',
+          description: 'Complete guide to HTML, CSS, JavaScript, and modern web development practices.',
+          type: 'Guide',
+          category: 'guides',
+          tags: ['Web Dev', 'Frontend', 'Basics'],
+        },
+        {
+          id: 'edu-3',
+          title: 'Python for Data Science',
+          description: 'Learn Python programming with focus on data analysis, visualization, and scientific computing.',
+          type: 'Documentation',
+          category: 'documentation',
+          tags: ['Python', 'Data Science', 'Programming'],
+        },
+      ]
+
+      setCampusResources([...resources, ...mockResources])
+    } catch (error) {
+      console.error('Error fetching resources:', error)
+      setCampusResources([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleArticleSubmit = (e) => {
+    e.preventDefault()
+
+    const newArticle = {
+      id: Date.now(),
+      ...articleForm,
+      tags: articleForm.tags.split(',').map(t => t.trim()).filter(Boolean),
+      createdAt: new Date().toISOString(),
+      author: 'You'
+    }
+
+    const updatedArticles = [newArticle, ...articles]
+    setArticles(updatedArticles)
+    localStorage.setItem('magazineArticles', JSON.stringify(updatedArticles))
+
+    setSuccess('Article created successfully!')
+    setArticleForm({ title: '', content: '', category: 'article', tags: '' })
+
+    setTimeout(() => setSuccess(null), 3000)
+  }
+
+  const handleDeleteArticle = (articleId) => {
+    const updatedArticles = articles.filter(a => a.id !== articleId)
+    setArticles(updatedArticles)
+    localStorage.setItem('magazineArticles', JSON.stringify(updatedArticles))
+  }
+
+  const handleAIAssist = async () => {
+    if (!articleForm.title) {
+      alert('Please enter an article title first')
+      return
+    }
+
+    setAiGenerating(true)
+    try {
+      // This would call your backend Bedrock API
+      // For now, we'll generate a placeholder
+      const aiContent = `# ${articleForm.title}
+
+## Introduction
+This is an AI-generated article about ${articleForm.title}. The content would be generated using AWS Bedrock Claude models through your backend API.
+
+## Key Points
+- Point 1: Understanding the fundamentals
+- Point 2: Practical applications
+- Point 3: Best practices and considerations
+
+## Conclusion
+Summary and next steps for ${articleForm.title}.
+
+*Generated with AI assistance*`
+
+      setArticleForm({ ...articleForm, content: aiContent })
+      setSuccess('AI content generated! Feel free to edit and customize.')
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (error) {
+      console.error('AI generation error:', error)
+    } finally {
+      setAiGenerating(false)
+    }
+  }
+
+  const filteredCampusResources = campusResources.filter(resource => {
+    const matchesSearch = resource.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         resource.description.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesCategory = selectedCategory === 'all' ||
+                           resource.category?.toLowerCase() === selectedCategory.toLowerCase()
+    return matchesSearch && matchesCategory
+  })
+
+  const filteredArticles = articles.filter(article => {
+    return article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           article.content.toLowerCase().includes(searchQuery.toLowerCase())
+  })
+
+  return (
+    <DocContainer>
+      <HubContent>
+        {/* File Tree Navigation - Windows OS Style */}
+        <FileTree>
+          <FileTreeTitleBar>
+            <FileTreeTitle>
+            </FileTreeTitle>
+            <WindowControls>
+              <WindowButton $close onClick={handleCloseWindow} />
+              <WindowButton $minimize onClick={handleMinimizeWindow} />
+              <WindowButton onClick={handleMaximizeWindow} />
+            </WindowControls>
+          </FileTreeTitleBar>
+
+          <FileTreeContent>
+            <FileTreeScrollableArea>
+              <FileTreeList>
+                {/* README folder - always expanded like DASHBOARD in Hub */}
+                <FileTreeItem>
+                  <FileTreeFolder
+                    $isLast={true}
+                    $active={readmeSubPages.includes(activeTab)}
+                    $expanded={true}
+                    onClick={handleReadmeClick}
+                  >
+                    README
+                  </FileTreeFolder>
+
+                  {/* README Sub-items - always visible */}
+                  <FileTreeSubList>
+                    <FileTreeItem>
+                      <FileTreeFile
+                        $active={activeTab === 'workflows'}
+                        $level={2}
+                        $isLast={false}
+                        onClick={() => navigateToPage('workflows')}
+                      >
+                        workflows
+                      </FileTreeFile>
+                    </FileTreeItem>
+                    <FileTreeItem>
+                      <FileTreeFile
+                        $active={activeTab === 'skills'}
+                        $level={2}
+                        $isLast={false}
+                        onClick={() => navigateToPage('skills')}
+                      >
+                        skills
+                      </FileTreeFile>
+                    </FileTreeItem>
+                    <FileTreeItem>
+                      <FileTreeFile
+                        $active={activeTab === 'tools'}
+                        $level={2}
+                        $isLast={true}
+                        onClick={() => navigateToPage('tools')}
+                      >
+                        tools
+                      </FileTreeFile>
+                    </FileTreeItem>
+                  </FileTreeSubList>
+                </FileTreeItem>
+              </FileTreeList>
+            </FileTreeScrollableArea>
+
+            {/* Educational Platforms Preview Section */}
+            <PreviewSection>
+              <PreviewTitle>Learning Resources</PreviewTitle>
+              {educationalPlatforms.map((platform, index) => (
+                <PlatformLink
+                  key={index}
+                  href={platform.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <PlatformIcon>{platform.icon}</PlatformIcon>
+                  <PlatformInfo>
+                    <PlatformName>{platform.name}</PlatformName>
+                    <PlatformDescription>{platform.description}</PlatformDescription>
+                  </PlatformInfo>
+                </PlatformLink>
+              ))}
+            </PreviewSection>
+
+          </FileTreeContent>
+        </FileTree>
+
+        <MainContentArea>
+        <ContentArea>
+          {success && <SuccessMessage>{success}</SuccessMessage>}
+
+          {/* README Section - Display README.md */}
+          <SectionContainer $active={activeTab === 'readme'}>
+            {activeTab === 'readme' && readmeContent && (
+              <MarkdownRenderer content={readmeContent} />
+            )}
+          </SectionContainer>
+
+          {/* Workflows Section */}
+          <SectionContainer $active={activeTab === 'workflows'}>
+            {activeTab === 'workflows' && workflowsContent && (
+              <MarkdownRenderer content={workflowsContent} />
+            )}
+          </SectionContainer>
+
+          {/* Skills Section */}
+          <SectionContainer $active={activeTab === 'skills'}>
+            {activeTab === 'skills' && skillsContent && (
+              <MarkdownRenderer content={skillsContent} />
+            )}
+          </SectionContainer>
+
+          {/* Tools Section */}
+          <SectionContainer $active={activeTab === 'tools'}>
+            {activeTab === 'tools' && toolsContent && (
+              <MarkdownRenderer content={toolsContent} />
+            )}
+          </SectionContainer>
+
+          {/* Educational Content Section */}
+          <SectionContainer $active={activeTab === 'educational-content'}>
+            {activeTab === 'educational-content' && (
+              <ReadmeDocument>
+                {loading ? (
+                  <LoadingSpinner />
+                ) : selectedArticle ? (
+                  <>
+                    <BackButton onClick={() => setSelectedArticle(null)}>
+                      ← Back to Education
+                    </BackButton>
+                    <ReadmeHeader>
+                      <ReadmeMainTitle>{selectedArticle.title}</ReadmeMainTitle>
+                      <ArticleDetailMetaRow>
+                        <ArticleDetailMeta>
+                          <span>By {selectedArticle.author}</span>
+                          <span>•</span>
+                          <span>{new Date(selectedArticle.date).toLocaleDateString()}</span>
+                        </ArticleDetailMeta>
+                        {user && (
+                          <ActionIconButton
+                            $bookmark
+                            onClick={() => addBookmark(selectedArticle)}
+                            disabled={bookmarks.some(b => b.id === selectedArticle.id)}
+                          >
+                            {bookmarks.some(b => b.id === selectedArticle.id) ? 'Bookmarked' : 'Bookmark'}
+                          </ActionIconButton>
+                        )}
+                      </ArticleDetailMetaRow>
+                      <ResourceTags>
+                        {selectedArticle.tags.map((tag, index) => (
+                          <Tag key={index}>{tag}</Tag>
+                        ))}
+                      </ResourceTags>
+                    </ReadmeHeader>
+                    <ReadmeSection>
+                      <ArticleDetailContent>{selectedArticle.content}</ArticleDetailContent>
+                    </ReadmeSection>
+                  </>
+                ) : (
+                  <>
+                    <ReadmeHeader>
+                      <ReadmeMainTitle>Education</ReadmeMainTitle>
+                      <ReadmeSubtitle>
+                        Curated learning resources, tutorials, and documentation to accelerate your learning journey
+                      </ReadmeSubtitle>
+                    </ReadmeHeader>
+
+                    <ReadmeSection>
+                      <ReadmeHeading>Featured Articles</ReadmeHeading>
+                      {educationArticles.map((article, index) => (
+                        <ArticleCard key={article.id} onClick={() => setSelectedArticle(article)}>
+                          <CategoryLabel>{article.category}</CategoryLabel>
+                          <ArticleTitle>{article.title}</ArticleTitle>
+                          <ReadmeParagraph style={{ marginTop: '0.5rem', fontSize: '0.95rem' }}>
+                            {article.excerpt}
+                          </ReadmeParagraph>
+                          <ArticleTimestamp>{new Date(article.date).toLocaleDateString()}</ArticleTimestamp>
+                        </ArticleCard>
+                      ))}
+                    </ReadmeSection>
+
+                    <ReadmeSection style={{ marginTop: '3rem' }}>
+                      <ReadmeHeading>Learning Resources</ReadmeHeading>
+                      <ResourceGrid>
+                        {filteredCampusResources.map(resource => (
+                          <ResourceCard key={resource.id}>
+                            <ResourceHeader>
+                              <ResourceType>{resource.type}</ResourceType>
+                              <ResourceTitle>{resource.title}</ResourceTitle>
+                            </ResourceHeader>
+                            <ResourceBody>
+                              <ResourceDescription>{resource.description}</ResourceDescription>
+                              {resource.tags && resource.tags.length > 0 && (
+                                <ResourceTags>
+                                  {resource.tags.slice(0, 3).map((tag, index) => (
+                                    <Tag key={index}>{tag}</Tag>
+                                  ))}
+                                </ResourceTags>
+                              )}
+                              <ResourceMeta>
+                                <span style={{ color: 'var(--gitthub-gray)', fontSize: '0.9rem' }}>
+                                  {resource.format || 'Resource'}
+                                </span>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                  {user && (
+                                    <ActionIconButton
+                                      $bookmark
+                                      onClick={() => addBookmark(resource)}
+                                      disabled={bookmarks.some(b => b.id === resource.id)}
+                                      style={{ padding: '0.5rem 0.8rem', fontSize: '0.75rem' }}
+                                    >
+                                      {bookmarks.some(b => b.id === resource.id) ? 'Saved' : 'Save'}
+                                    </ActionIconButton>
+                                  )}
+                                  <ViewButton onClick={() => resource.url && window.open(resource.url, '_blank')}>
+                                    View →
+                                  </ViewButton>
+                                </div>
+                              </ResourceMeta>
+                            </ResourceBody>
+                          </ResourceCard>
+                        ))}
+                      </ResourceGrid>
+                    </ReadmeSection>
+
+                    <ReadmeSection style={{ borderTop: 'none', paddingTop: '3rem' }}>
+                      <ReadmeHeading>Curated Learning Platforms</ReadmeHeading>
+                      <CuratedGrid>
+                        {curatedLinks.map((link, index) => (
+                          <CuratedCard
+                            key={index}
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <CuratedIcon>{link.icon}</CuratedIcon>
+                            <CuratedTitle>{link.title}</CuratedTitle>
+                            <CuratedDescription>{link.description}</CuratedDescription>
+                          </CuratedCard>
+                        ))}
+                      </CuratedGrid>
+                    </ReadmeSection>
+                  </>
+                )}
+              </ReadmeDocument>
+            )}
+          </SectionContainer>
+
+
+          {/* Curated Links Section */}
+          <SectionContainer $active={activeTab === 'curated'}>
+            {activeTab === 'curated' && (
+              <CuratedSection>
+                <SectionTitle>Curated Learning Platforms</SectionTitle>
+                <CuratedGrid>
+                  {curatedLinks.map((link, index) => (
+                    <CuratedCard
+                      key={index}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <CuratedIcon>{link.icon}</CuratedIcon>
+                      <CuratedTitle>{link.title}</CuratedTitle>
+                      <CuratedDescription>{link.description}</CuratedDescription>
+                    </CuratedCard>
+                  ))}
+                </CuratedGrid>
+              </CuratedSection>
+            )}
+          </SectionContainer>
+
+          {/* User Profile Section */}
+          <SectionContainer $active={activeTab === 'user-profile'}>
+            {activeTab === 'user-profile' && user && (
+              <ReadmeDocument>
+                {/* Compact User Header */}
+                <DashboardHeader>
+                  <DashboardHeaderLeft>
+                    <DashboardAvatar>
+                      {getUserInitial()}
+                    </DashboardAvatar>
+                  </DashboardHeaderLeft>
+                  <DashboardHeaderRight>
+                    <DashboardTitle>User Profile</DashboardTitle>
+                    <UserMetaInfo>
+                      <UserName>{getUserName()}</UserName>
+                      <Separator>·</Separator>
+                      <UserEmail>{user.email || userAttributes?.email || 'No email'}</UserEmail>
+                    </UserMetaInfo>
+                  </DashboardHeaderRight>
+                </DashboardHeader>
+
+                {/* Compact Content */}
+                <div>
+                  <CourseSection>
+                    <h2 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '0.75rem' }}>Account Information</h2>
+                    <InfoGrid>
+                      <InfoItem>
+                        <InfoLabel>Email:</InfoLabel>
+                        <InfoValue>{user.email || userAttributes?.email || 'Not available'}</InfoValue>
+                      </InfoItem>
+                      {userAttributes?.name && (
+                        <InfoItem>
+                          <InfoLabel>Full Name:</InfoLabel>
+                          <InfoValue>{userAttributes.name}</InfoValue>
+                        </InfoItem>
+                      )}
+                      {user.created_at && (
+                        <InfoItem>
+                          <InfoLabel>Member Since:</InfoLabel>
+                          <InfoValue>
+                            {new Date(user.created_at).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })}
+                          </InfoValue>
+                        </InfoItem>
+                      )}
+                      {userAttributes?.sub && (
+                        <InfoItem>
+                          <InfoLabel>User ID:</InfoLabel>
+                          <InfoValue>{userAttributes.sub}</InfoValue>
+                        </InfoItem>
+                      )}
+                      {userAttributes?.email_verified && (
+                        <InfoItem>
+                          <InfoLabel>Email Verified:</InfoLabel>
+                          <InfoValue>{userAttributes.email_verified === 'true' ? 'Yes' : 'No'}</InfoValue>
+                        </InfoItem>
+                      )}
+                    </InfoGrid>
+                  </CourseSection>
+
+                  <SignOutButton
+                    onClick={handleSignOut}
+                    disabled={signingOut}
+                  >
+                    {signingOut ? 'Signing Out...' : 'Sign Out'}
+                  </SignOutButton>
+                </div>
+              </ReadmeDocument>
+            )}
+          </SectionContainer>
+
+          {/* Harry Funke Section */}
+          <SectionContainer $active={activeTab === 'harry-funke'}>
+            {activeTab === 'harry-funke' && (
+              <>
+                <SectionTitle>Harry Funke</SectionTitle>
+                <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--gitthub-gray)' }}>
+                  <p>Content coming soon...</p>
+                </div>
+              </>
+            )}
+          </SectionContainer>
+        </ContentArea>
+      </MainContentArea>
+      </HubContent>
+    </DocContainer>
+  )
+}
+
+export default Docs

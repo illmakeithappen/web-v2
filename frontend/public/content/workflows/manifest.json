@@ -1,0 +1,62 @@
+{
+  "entries": [
+    {
+      "id": "workflow_20251115_008",
+      "name": "Workflow 20251115 008 Deploy Gitthub Workflow Skill To Claude Ai",
+      "description": "install and configure the gitthub-workflow skill in claude.ai for generating structured workflows",
+      "category": "workflow",
+      "tags": [
+        "deploy",
+        "claude-skills",
+        "claude-ai",
+        "skill-installation",
+        "workflow-automation"
+      ],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "workflow_20251115_009",
+      "name": "Workflow 20251115 009 Deploy Gitthub Workflow Skill To Claude Code",
+      "description": "install and configure the gitthub-workflow skill in claude code via skills directory for generating structured workflows",
+      "category": "workflow",
+      "tags": [
+        "deploy",
+        "claude-skills",
+        "claude-code",
+        "skill-installation",
+        "vscode"
+      ],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "workflow_20251115_010",
+      "name": "Workflow 20251115 010 Deploy Gitthub Workflow Skill To Claude Desktop",
+      "description": "install and configure the gitthub-workflow skill in claude desktop via ui import for generating structured workflows",
+      "category": "workflow",
+      "tags": [
+        "deploy",
+        "claude-skills",
+        "claude-desktop",
+        "skill-installation",
+        "desktop-app"
+      ],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "20251118_001_deploy_schwarzenbach_wealth_management_website",
+      "name": "Workflow 20251118 001 Deploy Schwarzenbach Wealth Management Website",
+      "description": "create a gitthub workflow for prototyping a website",
+      "category": "workflow",
+      "tags": [],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "20251120_143022_claude_workflow",
+      "name": "Workflow 20251120 001 Interactive 3D Cube",
+      "description": "Recreate the animated 3D cube from BrowserBase's landing page",
+      "category": "workflow",
+      "tags": [],
+      "difficulty": "advanced"
+    }
+  ]
+}

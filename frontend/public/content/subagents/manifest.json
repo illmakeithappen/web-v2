@@ -1,0 +1,19 @@
+{
+  "entries": [
+    {
+      "id": "research-specialist",
+      "name": "research-specialist",
+      "description": "Specialized agent for content research and information gathering in multi-agent systems.\nFocuses on web search, source evaluation, and structured research synthesis.\nDesigned to work standalone or as part of larger agent workflows for research-intensive tasks.\n",
+      "category": "research",
+      "tags": [
+        "multi-agent",
+        "specialist",
+        "research",
+        "information-gathering",
+        "web-search",
+        "claude-code"
+      ],
+      "difficulty": "beginner"
+    }
+  ]
+}

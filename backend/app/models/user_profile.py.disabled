@@ -1,0 +1,294 @@
+"""
+Hybrid User Profile Model for AWS Cognito + PostgreSQL
+Links to Cognito users via cognito_sub (Cognito's user ID)
+"""
+
+from datetime import datetime, date
+from typing import Optional, Dict, Any, List
+from decimal import Decimal
+from sqlalchemy import Column, String, Integer, Boolean, DECIMAL, Date, TIMESTAMP, Text, ARRAY
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
+from sqlalchemy.schema import ForeignKey, UniqueConstraint, CheckConstraint
+
+from ..core.database import Base
+
+
+class UserProfile(Base):
+    """
+    User profile table storing application-specific data
+    Links to AWS Cognito users via cognito_sub
+    """
+    __tablename__ = "user_profiles"
+    
+    # Primary key
+    profile_id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    
+    # Cognito integration
+    cognito_sub = Column(String(255), unique=True, nullable=False, index=True)
+    
+    # Subscription and limits
+    subscription_tier = Column(String(50), nullable=False, default='free')
+    daily_limit = Column(Integer, nullable=False, default=5)
+    monthly_limit = Column(Integer, nullable=False, default=100)
+    courses_created = Column(Integer, nullable=False, default=0)
+    
+    # User preferences
+    preferred_ai_model = Column(String(100), default='claude-3-sonnet')
+    difficulty_preference = Column(String(50), default='intermediate')
+    theme_preference = Column(String(20), default='light')
+    language_preference = Column(String(10), default='en')
+    notification_settings = Column(
+        JSONB, 
+        default={"email": True, "courses": True, "updates": False}
+    )
+    
+    # Learning progress
+    total_courses_completed = Column(Integer, default=0)
+    total_learning_hours = Column(DECIMAL(10, 2), default=0.0)
+    current_streak_days = Column(Integer, default=0)
+    longest_streak_days = Column(Integer, default=0)
+    last_activity_date = Column(Date)
+    
+    # Metadata and flags
+    onboarding_completed = Column(Boolean, default=False)
+    user_metadata = Column(JSONB, default={})
+    
+    # Timestamps
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            subscription_tier.in_(['free', 'premium', 'enterprise']),
+            name='valid_subscription_tier'
+        ),
+        CheckConstraint(
+            difficulty_preference.in_(['beginner', 'intermediate', 'advanced']),
+            name='valid_difficulty'
+        ),
+        CheckConstraint(
+            theme_preference.in_(['light', 'dark', 'auto']),
+            name='valid_theme'
+        ),
+    )
+    
+    # Relationships
+    api_keys = relationship("UserAPIKeys", back_populates="profile", uselist=False, cascade="all, delete-orphan")
+    courses = relationship("UserCourse", back_populates="profile", cascade="all, delete-orphan")
+    enrollments = relationship("CourseEnrollment", back_populates="profile", cascade="all, delete-orphan")
+    achievements = relationship("UserAchievement", back_populates="profile", cascade="all, delete-orphan")
+    activity_logs = relationship("UserActivityLog", back_populates="profile", cascade="all, delete-orphan")
+
+
+class UserAPIKeys(Base):
+    """
+    Encrypted API keys storage for AI services
+    """
+    __tablename__ = "user_api_keys"
+
+    profile_id = Column(UUID(as_uuid=True), ForeignKey('user_profiles.profile_id', ondelete='CASCADE'), primary_key=True)
+    cognito_sub = Column(String(255), nullable=False)  # Reference only, not a foreign key
+    
+    # Encrypted API keys (using PGP encryption)
+    openai_key_encrypted = Column(Text)
+    anthropic_key_encrypted = Column(Text)
+    google_key_encrypted = Column(Text)
+    aws_bedrock_key_encrypted = Column(Text)
+    
+    # Key management
+    encryption_key_id = Column(String(255))
+    key_status = Column(
+        JSONB, 
+        default={"openai": False, "anthropic": False, "google": False, "aws_bedrock": False}
+    )
+    
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    profile = relationship("UserProfile", back_populates="api_keys")
+
+
+class UserCourse(Base):
+    """
+    User-created courses with full content and metadata
+    """
+    __tablename__ = "user_courses"
+    
+    course_id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    profile_id = Column(UUID(as_uuid=True), ForeignKey('user_profiles.profile_id', ondelete='CASCADE'), nullable=False, index=True)
+    cognito_sub = Column(String(255), nullable=False, index=True)  # Reference only
+    
+    # Course content
+    title = Column(String(500), nullable=False)
+    topic = Column(String(255), index=True)
+    description = Column(Text)
+    course_data = Column(JSONB, nullable=False)  # Full course content
+    
+    # Course metadata
+    ai_model = Column(String(100))
+    difficulty_level = Column(String(50))
+    estimated_duration = Column(String(100))
+    completion_status = Column(String(50), default='not_started', index=True)
+    progress_percentage = Column(DECIMAL(5, 2), default=0.0)
+    
+    # Sharing and visibility
+    is_public = Column(Boolean, default=False, index=True)
+    is_published = Column(Boolean, default=False)
+    share_token = Column(String(255), unique=True)
+    
+    # Analytics
+    view_count = Column(Integer, default=0)
+    completion_count = Column(Integer, default=0)
+    rating = Column(DECIMAL(3, 2), default=0.0)
+    tags = Column(ARRAY(Text), index=True)  # PostgreSQL array for tags
+    
+    # Timestamps
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    last_accessed = Column(TIMESTAMP(timezone=True))
+    completed_at = Column(TIMESTAMP(timezone=True))
+    
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(rating >= 0.0, name='rating_min'),
+        CheckConstraint(rating <= 5.0, name='rating_max'),
+        CheckConstraint(
+            difficulty_level.in_(['beginner', 'intermediate', 'advanced']),
+            name='valid_difficulty'
+        ),
+        CheckConstraint(
+            completion_status.in_(['not_started', 'in_progress', 'completed', 'archived']),
+            name='valid_completion_status'
+        ),
+        CheckConstraint(progress_percentage >= 0.0, name='progress_min'),
+        CheckConstraint(progress_percentage <= 100.0, name='progress_max'),
+    )
+    
+    # Relationships
+    profile = relationship("UserProfile", back_populates="courses")
+    enrollments = relationship("CourseEnrollment", back_populates="course", cascade="all, delete-orphan")
+
+
+class CourseEnrollment(Base):
+    """
+    Course enrollments and learning progress tracking
+    """
+    __tablename__ = "course_enrollments"
+    
+    enrollment_id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    profile_id = Column(UUID(as_uuid=True), ForeignKey('user_profiles.profile_id', ondelete='CASCADE'), nullable=False, index=True)
+    cognito_sub = Column(String(255), nullable=False)  # Reference only
+    course_id = Column(UUID(as_uuid=True), ForeignKey('user_courses.course_id', ondelete='CASCADE'), nullable=False, index=True)
+    
+    # Enrollment data
+    enrollment_type = Column(String(50), default='free')
+    progress_percentage = Column(DECIMAL(5, 2), default=0.0)
+    completion_status = Column(String(50), default='not_started', index=True)
+    
+    # Learning analytics
+    time_spent_minutes = Column(Integer, default=0)
+    last_lesson_completed = Column(Integer, default=0)
+    quiz_scores = Column(JSONB, default=[])
+    notes = Column(JSONB, default=[])
+    
+    # Timestamps
+    enrolled_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    last_accessed = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    completed_at = Column(TIMESTAMP(timezone=True))
+    
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            enrollment_type.in_(['free', 'premium']),
+            name='valid_enrollment_type'
+        ),
+        CheckConstraint(
+            completion_status.in_(['not_started', 'in_progress', 'completed', 'dropped']),
+            name='valid_completion_status'
+        ),
+        CheckConstraint(progress_percentage >= 0.0, name='progress_min'),
+        CheckConstraint(progress_percentage <= 100.0, name='progress_max'),
+        UniqueConstraint('profile_id', 'course_id', name='unique_enrollment'),
+    )
+    
+    # Relationships
+    profile = relationship("UserProfile", back_populates="enrollments")
+    course = relationship("UserCourse", back_populates="enrollments")
+
+
+class UserAchievement(Base):
+    """
+    User achievements and gamification
+    """
+    __tablename__ = "user_achievements"
+    
+    achievement_id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    profile_id = Column(UUID(as_uuid=True), ForeignKey('user_profiles.profile_id', ondelete='CASCADE'), nullable=False, index=True)
+    cognito_sub = Column(String(255), nullable=False)  # Reference only
+    
+    achievement_type = Column(String(100), nullable=False, index=True)
+    achievement_name = Column(String(255), nullable=False)
+    description = Column(Text)
+    points_earned = Column(Integer, default=0)
+    level_achieved = Column(Integer, default=1)
+    
+    earned_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            achievement_type.in_([
+                'course_creator', 'course_completer', 'streak_master', 
+                'knowledge_seeker', 'mentor', 'early_adopter', 'power_user'
+            ]),
+            name='valid_achievement_type'
+        ),
+        UniqueConstraint('profile_id', 'achievement_type', 'level_achieved', name='unique_achievement'),
+    )
+    
+    # Relationships
+    profile = relationship("UserProfile", back_populates="achievements")
+
+
+class UserActivityLog(Base):
+    """
+    Application activity logging (not authentication events)
+    """
+    __tablename__ = "user_activity_log"
+    
+    log_id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    profile_id = Column(UUID(as_uuid=True), ForeignKey('user_profiles.profile_id', ondelete='SET NULL'), index=True)
+    cognito_sub = Column(String(255), index=True)  # Reference only
+    
+    # Activity data
+    action = Column(String(100), nullable=False, index=True)
+    resource_type = Column(String(50))
+    resource_id = Column(String(255))
+    details = Column(JSONB, default={})
+    
+    # Request metadata
+    ip_address = Column(String(45))  # IPv6 support
+    user_agent = Column(Text)
+    session_id = Column(String(255))
+    
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), index=True)
+    
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            action.in_([
+                'course_create', 'course_update', 'course_delete', 'course_view', 'course_complete',
+                'enrollment_create', 'enrollment_complete', 'enrollment_drop',
+                'api_key_update', 'profile_update', 'preference_update',
+                'quiz_attempt', 'lesson_complete', 'note_create'
+            ]),
+            name='valid_action'
+        ),
+    )
+    
+    # Relationships
+    profile = relationship("UserProfile", back_populates="activity_logs")

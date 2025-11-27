@@ -1,0 +1,260 @@
+{
+  "main": {
+    "id": "95db1521cddbeeda",
+    "type": "split",
+    "children": [
+      {
+        "id": "13007d202bfe496e",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "c5d22680a723c0b2",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "README/workflows.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "workflows"
+            }
+          },
+          {
+            "id": "0622850c192b7d01",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "README/mcp.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "mcp"
+            }
+          },
+          {
+            "id": "686efa799112ca4b",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "skills/gitthub-workflow/SKILL.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "SKILL"
+            }
+          }
+        ],
+        "currentTab": 1
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "5fb4753b6c6c3405",
+    "type": "split",
+    "children": [
+      {
+        "id": "42e89a4fe98b27ee",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "c861af2e665d4bfc",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "551f4af9656d150e",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "59a39f61aec56cd2",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 237.5
+  },
+  "right": {
+    "id": "fb1c52d378d55606",
+    "type": "split",
+    "children": [
+      {
+        "id": "daae47662bf97a1e",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "6321ae4599787208",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "workflows/workflow_20251115_008_deploy_gitthub_workflow_skill_to_claude_ai/WORKFLOW.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for WORKFLOW"
+            }
+          },
+          {
+            "id": "205e23fa959c1d4f",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "workflows/workflow_20251115_008_deploy_gitthub_workflow_skill_to_claude_ai/WORKFLOW.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from WORKFLOW"
+            }
+          },
+          {
+            "id": "9c0732e2d93509da",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "bdccda0a119da189",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "71260f2ff9d1c8c7",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "workflows/workflow_20251115_008_deploy_gitthub_workflow_skill_to_claude_ai/WORKFLOW.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of WORKFLOW"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "0622850c192b7d01",
+  "lastOpenFiles": [
+    "skills/gitthub-workflow/references/reference-handling.md",
+    "skills/gitthub-workflow/references/skill-recommendations.md",
+    "skills/gitthub-workflow/SKILL.md",
+    "web-v2-vercel-migration.md",
+    "README/testimonials.md",
+    "README/welcome.md",
+    "subagents/research-specialist/references/example-scenario.md",
+    "subagents/research-specialist/references/communication-pattern.md",
+    "subagents/research-specialist/references/architecture.md",
+    "subagents/research-specialist/references/system-prompt.md",
+    "subagents/research-specialist/SUBAGENT.md",
+    "subagents/research-specialist/references",
+    "subagents/research-specialist",
+    "subagents/_SUBAGENT_STRUCTURE.md",
+    "subagents/_SUBAGENT_TEMPLATE.md",
+    "subagents/references",
+    "subagents",
+    "skills/references/marketplace-distribution.md",
+    "skills/references",
+    "mcp/github-mcp-server/references/prompts",
+    "mcp/github-mcp-server/references/process-patterns",
+    "mcp/github-mcp-server/references/format-standards",
+    "mcp/github-mcp-server/references/examples",
+    "mcp/filesystem-mcp-server/references/setup-guide.md",
+    "mcp/filesystem-mcp-server/references/security-best-practices.md",
+    "mcp/filesystem-mcp-server/references/prompts",
+    "mcp/github-mcp-server/MCP.md",
+    "mcp/filesystem-mcp-server/MCP.md",
+    "README/workflows.md",
+    "README/mcp.md",
+    "workflows/workflow_20251115_008_deploy_gitthub_workflow_skill_to_claude_ai/WORKFLOW.md",
+    "skills/_SKILL_STRUCTURE.md",
+    "README/skills.md",
+    "workflows/workflow_20251120_001_interactive_3d_cube/WORKFLOW.md",
+    "workflows/20251120_001_interactive_3d_cube/WORKFLOW.md",
+    "skills/_SKILL_TEMPLATE.md",
+    "workflows/workflow_20251118_001_deploy_schwarzenbach_wealth_management_website/references/unnamed.png",
+    "workflows/workflow_20251118_001_deploy_schwarzenbach_wealth_management_website/references/logo-schwarzenbach.png",
+    "workflows/workflow_20251118_001_deploy_schwarzenbach_wealth_management_website/references/ChatGPT Image 15. Okt. 2025, 16_20_04.png",
+    "workflows/deploy-cc-schwarzenbach-website-prototype/references/unnamed.png",
+    "workflows/deploy-cc-schwarzenbach-website-prototype/references/logo-schwarzenbach.png",
+    "workflows/deploy-cc-schwarzenbach-website-prototype/references/ChatGPT Image 15. Okt. 2025, 16_20_04.png"
+  ]
+}

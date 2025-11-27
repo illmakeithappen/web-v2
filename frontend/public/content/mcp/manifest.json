@@ -1,0 +1,34 @@
+{
+  "entries": [
+    {
+      "id": "filesystem-mcp-server",
+      "name": "Filesystem MCP Server",
+      "description": "Secure file system operations server providing controlled access to directory trees.\nEnables AI assistants to read, write, search, and manage files with configurable permissions.\nPart of the official MCP reference server collection.\n",
+      "category": "file-system",
+      "tags": [
+        "filesystem",
+        "file-operations",
+        "reference-server",
+        "official",
+        "read-write",
+        "search"
+      ],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "github-mcp-server",
+      "name": "GitHub MCP Server",
+      "description": "Complete GitHub integration for AI assistants via MCP.\nManage repositories, issues, pull requests, code search, and workflows.\nEnables automated repository management and collaborative development tasks.\n",
+      "category": "version-control",
+      "tags": [
+        "github",
+        "git",
+        "repositories",
+        "issues",
+        "pull-requests",
+        "code-search"
+      ],
+      "difficulty": "intermediate"
+    }
+  ]
+}

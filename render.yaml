@@ -1,0 +1,60 @@
+services:
+  - type: web
+    name: farp-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: DATABASE_HOST
+        value: ai-learning-db.c3au0waaib3b.eu-north-1.rds.amazonaws.com
+      - key: DATABASE_PORT
+        value: 5432
+      - key: DATABASE_NAME
+        value: ai_learning_platform
+      - key: DATABASE_USER
+        value: postgres
+      - key: DATABASE_PASSWORD
+        sync: false  # Set as secret in Render dashboard
+      - key: AWS_ACCESS_KEY_ID
+        sync: false  # Set as secret in Render dashboard
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false  # Set as secret in Render dashboard
+      - key: AWS_REGION
+        value: eu-north-1
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: ENVIRONMENT
+        value: production
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: farp-backend
+          property: host
+      - key: FRONTEND_URL
+        value: https://gitthub.org
+      - key: FRONTEND_URL_RENDER
+        fromService:
+          type: web
+          name: farp-frontend
+          property: host
+
+  - type: web
+    name: farp-frontend
+    env: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Don't set VITE_API_URL - let config.js use hardcoded fallback
+      # - key: VITE_API_URL
+      #   value: https://farp-backend.onrender.com/api/v1
+
+# Optional: PostgreSQL database on Render (alternative to AWS RDS)
+# databases:
+#   - name: farp-database
+#     databaseName: ai_learning_platform
+#     user: postgres

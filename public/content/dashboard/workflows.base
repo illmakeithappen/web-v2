@@ -1,0 +1,24 @@
+views:
+  - type: table
+    name: workflows
+    filters:
+      and:
+        - file.inFolder("workflows")
+    order:
+      - file.name
+      - agent
+      - title
+      - type
+      - total_steps
+      - tools_required
+      - model
+      - last_modified
+      - created_date
+      - file.links
+    sort:
+      - property: file.name
+        direction: ASC
+    columnSize:
+      file.name: 128
+      note.agent: 106
+      note.title: 246
