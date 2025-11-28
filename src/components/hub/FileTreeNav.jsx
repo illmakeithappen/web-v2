@@ -277,6 +277,40 @@ const NoResultsText = styled.div`
   text-align: center;
 `;
 
+const StepItem = styled.li`
+  padding: 6px 12px 6px 28px;
+  font-size: 0.8rem;
+  font-family: 'IBM Plex Mono', 'Courier New', monospace;
+  color: #555;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+
+  &:last-child {
+    border-bottom: none;
+  }
+`;
+
+const StepNumber = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  background: #0053b6;
+  color: white;
+  border-radius: 50%;
+  font-size: 0.65rem;
+  font-weight: 600;
+  flex-shrink: 0;
+`;
+
+const StepName = styled.span`
+  flex: 1;
+  line-height: 1.3;
+`;
+
 // Helper to extract and format date from workflow ID
 const formatWorkflowDate = (workflowId) => {
   // Match patterns like: workflow_20251120_011_... or 20251120_...

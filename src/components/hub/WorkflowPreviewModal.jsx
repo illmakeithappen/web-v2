@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import styled from 'styled-components';
 import { carbonColors, carbonSpacing, carbonShadows, carbonZIndex } from '../../styles/carbonTheme';
 import { DifficultyBadge } from '../carbon/CarbonTag';
 import CarbonButton from '../carbon/CarbonButton';
+import { parseWorkflowSteps } from '../../utils/workflow-parser';
 
 // Styled Components
 const ModalOverlay = styled.div`
@@ -294,9 +295,34 @@ const WorkflowPreviewModal = ({
     }
   }, [showManageMenu]);
 
-  if (!isOpen || !workflow) return null;
+  // Parse steps with multiple fallbacks
+  const steps = useMemo(() => {
+    if (!workflow) return [];
 
-  const steps = workflow.steps || [];
+    // Priority 1: If steps are already populated (from template-service), use them
+    if (workflow.steps?.length > 0) return workflow.steps;
+
+    // Priority 2: Use frontmatter.steps array if available (from YAML frontmatter)
+    if (workflow.frontmatter?.steps && Array.isArray(workflow.frontmatter.steps)) {
+      return workflow.frontmatter.steps;
+    }
+
+    // Priority 3: Parse steps from content
+    if (workflow.content) {
+      try {
+        const parsedSteps = parseWorkflowSteps(workflow.content);
+        if (parsedSteps.length > 0) {
+          return parsedSteps.map(s => s.title || `Step ${s.step_number}`);
+        }
+      } catch (error) {
+        console.warn('Error parsing workflow steps:', error);
+      }
+    }
+
+    return [];
+  }, [workflow]);
+
+  if (!isOpen || !workflow) return null;
 
   const handleDownloadSkills = () => {
     try {

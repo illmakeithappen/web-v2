@@ -11,6 +11,7 @@ import {
   deleteProject,
   duplicateProject
 } from '../../services/project-service';
+import { useAuth } from '../../contexts/AuthContext';
 
 // ============================================================================
 // STYLED COMPONENTS
@@ -148,7 +149,7 @@ const ItemCountBadge = styled.div`
   color: #0284c7;
 `;
 
-const ProviderBadge = styled.div`
+const PlatformBadge = styled.div`
   display: inline-block;
   padding: 2px 8px;
   border-radius: 4px;
@@ -221,15 +222,15 @@ const getItemCount = (project) => {
 
 const getTableColumns = () => [
   {
-    key: 'provider',
-    header: 'Provider',
+    key: 'platform',
+    header: 'Platform',
     width: '100px',
     align: 'center',
     sortable: true,
     render: (value) => (
-      <ProviderBadge>
+      <PlatformBadge>
         {value || 'Local'}
-      </ProviderBadge>
+      </PlatformBadge>
     ),
   },
   {
@@ -256,7 +257,7 @@ const getTableColumns = () => [
     ),
   },
   {
-    key: 'updatedAt',
+    key: 'updated_at',
     header: 'Last Modified',
     width: '120px',
     sortable: true,
@@ -330,11 +331,14 @@ export default function ProjectsCatalog({
   activeTab,
   onTabChange
 }) {
+  // Auth context
+  const { user, isAuthenticated } = useAuth();
+
   // State management
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: 'updatedAt', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'updated_at', direction: 'desc' });
   const [density, setDensity] = useState('normal');
   const [openManageMenuId, setOpenManageMenuId] = useState(null);
 
@@ -342,11 +346,12 @@ export default function ProjectsCatalog({
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  // Load projects from localStorage
-  const loadProjects = () => {
+  // Load projects from Supabase
+  const loadProjects = async () => {
     setLoading(true);
     try {
-      const loadedProjects = getProjects();
+      console.log('Loading projects... isAuthenticated:', isAuthenticated, 'user:', user?.id);
+      const loadedProjects = await getProjects();
       setProjects(loadedProjects);
       console.log('Loaded projects:', loadedProjects.length);
     } catch (err) {
@@ -357,10 +362,10 @@ export default function ProjectsCatalog({
     }
   };
 
-  // Load on mount
+  // Load on mount and when auth changes
   useEffect(() => {
     loadProjects();
-  }, []);
+  }, [isAuthenticated]);
 
   // Close manage dropdown when clicking outside
   useEffect(() => {
@@ -412,7 +417,7 @@ export default function ProjectsCatalog({
           return sortConfig.direction === 'asc'
             ? aVal.localeCompare(bVal)
             : bVal.localeCompare(aVal);
-        } else if (aVal instanceof Date || sortConfig.key.includes('At')) {
+        } else if (aVal instanceof Date || sortConfig.key.includes('_at')) {
           const dateA = new Date(aVal);
           const dateB = new Date(bVal);
           return sortConfig.direction === 'asc'
@@ -444,28 +449,39 @@ export default function ProjectsCatalog({
     }
   };
 
-  const handleCreateProject = () => {
-    const newProject = createProject({
-      name: 'New Project',
-      description: 'A new project for organizing workflows, skills, and tools'
-    });
-    loadProjects(); // Refresh list
-    if (onProjectView) {
-      onProjectView(newProject); // Open the new project immediately
+  const handleCreateProject = async () => {
+    try {
+      const newProject = await createProject({
+        name: 'New Project',
+        description: 'A new project for organizing workflows, skills, and tools'
+      });
+
+      if (!newProject) {
+        alert('Failed to create project. Please make sure you are signed in.');
+        return;
+      }
+
+      await loadProjects(); // Refresh list
+      if (onProjectView && newProject) {
+        onProjectView(newProject); // Open the new project immediately
+      }
+    } catch (err) {
+      console.error('Error creating project:', err);
+      alert('Failed to create project. Please try again.');
     }
   };
 
-  const handleDuplicateProject = (projectId) => {
-    const duplicated = duplicateProject(projectId);
+  const handleDuplicateProject = async (projectId) => {
+    const duplicated = await duplicateProject(projectId);
     if (duplicated) {
-      loadProjects(); // Refresh list
+      await loadProjects(); // Refresh list
     }
   };
 
-  const handleDeleteProject = (projectId) => {
+  const handleDeleteProject = async (projectId) => {
     if (window.confirm('Are you sure you want to delete this project?')) {
-      deleteProject(projectId);
-      loadProjects(); // Refresh list
+      await deleteProject(projectId);
+      await loadProjects(); // Refresh list
     }
   };
 
@@ -529,13 +545,20 @@ export default function ProjectsCatalog({
         </CarbonToolbar>
 
         <EmptyStateContainer>
-          <EmptyStateTitle>No projects yet</EmptyStateTitle>
+          <EmptyStateTitle>
+            {isAuthenticated ? 'No projects yet' : 'Sign in to create projects'}
+          </EmptyStateTitle>
           <EmptyStateDescription>
-            Create your first project to organize workflows, skills, and tools with a visual canvas.
+            {isAuthenticated
+              ? 'Create your first project to organize workflows, skills, and tools with a visual canvas.'
+              : 'Projects are saved to your account. Please sign in to create and manage projects.'
+            }
           </EmptyStateDescription>
-          <CarbonButton kind="primary" onClick={handleCreateProject}>
-            Create Project
-          </CarbonButton>
+          {isAuthenticated && (
+            <CarbonButton kind="primary" onClick={handleCreateProject}>
+              Create Project
+            </CarbonButton>
+          )}
         </EmptyStateContainer>
       </CatalogContainer>
     );
@@ -556,10 +579,10 @@ export default function ProjectsCatalog({
         density={density}
         onDensityChange={setDensity}
         showDensityControls={false}
-        primaryAction={{
+        primaryAction={isAuthenticated ? {
           label: 'New Project',
           onClick: handleCreateProject
-        }}
+        } : null}
       >
         {/* Tab Switcher */}
         <TabSwitcherButtonGroup>

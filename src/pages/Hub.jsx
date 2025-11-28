@@ -366,8 +366,8 @@ export default function Hub() {
     handleProjectView(project);
   };
 
-  const handleProjectDuplicate = (projectId) => {
-    const duplicated = duplicateProject(projectId);
+  const handleProjectDuplicate = async (projectId) => {
+    const duplicated = await duplicateProject(projectId);
     if (duplicated) {
       console.log('Project duplicated:', duplicated.name);
     }
@@ -378,8 +378,8 @@ export default function Hub() {
     console.log('Project exported:', projectId);
   };
 
-  const handleProjectDeleteFromModal = (projectId) => {
-    const success = deleteProject(projectId);
+  const handleProjectDeleteFromModal = async (projectId) => {
+    const success = await deleteProject(projectId);
     if (success) {
       console.log('Project deleted:', projectId);
       handleCloseProjectModal();

@@ -12,42 +12,61 @@
  * @returns {array} Array of structured step objects
  */
 export function parseWorkflowSteps(content, stepTitles = []) {
-  if (!content) return [];
-
   const steps = [];
 
-  // Split content by step headers (## Step N: Title)
-  const stepSections = content.split(/\n##\s+Step\s+(\d+):/i);
+  // Try to parse from content if available
+  if (content) {
+    // Split content by step headers (## Step N: or ### Step N: - support both formats)
+    const stepSections = content.split(/\n#{2,3}\s+Step\s+(\d+):/i);
 
-  // First element is the frontmatter/intro, skip it
-  for (let i = 1; i < stepSections.length; i += 2) {
-    const stepNumber = parseInt(stepSections[i]);
-    const stepContent = stepSections[i + 1] || '';
+    // First element is the frontmatter/intro, skip it
+    for (let i = 1; i < stepSections.length; i += 2) {
+      const stepNumber = parseInt(stepSections[i]);
+      const stepContent = stepSections[i + 1] || '';
 
-    // Extract title (first line after the step number)
-    const lines = stepContent.trim().split('\n');
-    const title = lines[0]?.trim() || stepTitles[stepNumber - 1] || `Step ${stepNumber}`;
+      // Extract title (first line after the step number)
+      const lines = stepContent.trim().split('\n');
+      const title = lines[0]?.trim() || stepTitles[stepNumber - 1] || `Step ${stepNumber}`;
 
-    // Extract sections from the step content
-    const instruction = extractSection(stepContent, 'Instruction');
-    const skills = extractListSection(stepContent, 'Skills');
-    const tools = extractListSection(stepContent, 'Tools');
-    const resources = extractListSection(stepContent, 'Resources');
-    const deliverable = extractSection(stepContent, 'Deliverable');
+      // Extract sections from the step content
+      const instruction = extractSection(stepContent, 'Instruction');
+      const skills = extractListSection(stepContent, 'Skills');
+      const tools = extractListSection(stepContent, 'Tools');
+      const resources = extractListSection(stepContent, 'Resources');
+      const deliverable = extractSection(stepContent, 'Deliverable');
 
-    // Infer inputs and outputs from instruction and deliverable
-    const { inputs, outputs } = inferInputsOutputs(instruction, deliverable, stepNumber);
+      // Infer inputs and outputs from instruction and deliverable
+      const { inputs, outputs } = inferInputsOutputs(instruction, deliverable, stepNumber);
 
-    steps.push({
-      step_number: stepNumber,
-      title,
-      instruction: instruction || 'No instructions provided',
-      skills: skills.length > 0 ? skills : ['General'],
-      tools: tools.length > 0 ? tools : [],
-      resources: resources,
-      deliverable: deliverable || 'Complete the step',
-      inputs,
-      outputs
+      steps.push({
+        step_number: stepNumber,
+        title,
+        instruction: instruction || 'No instructions provided',
+        skills: skills.length > 0 ? skills : ['General'],
+        tools: tools.length > 0 ? tools : [],
+        resources: resources,
+        deliverable: deliverable || 'Complete the step',
+        inputs,
+        outputs
+      });
+    }
+  }
+
+  // If no steps found from content parsing, fall back to stepTitles
+  if (steps.length === 0 && stepTitles && stepTitles.length > 0) {
+    stepTitles.forEach((title, index) => {
+      const stepNumber = index + 1;
+      steps.push({
+        step_number: stepNumber,
+        title: typeof title === 'string' ? title : `Step ${stepNumber}`,
+        instruction: 'No instructions provided',
+        skills: ['General'],
+        tools: [],
+        resources: [],
+        deliverable: 'Complete the step',
+        inputs: stepNumber > 1 ? [`Step ${stepNumber - 1} output`] : ['Initial input'],
+        outputs: [`Step ${stepNumber} result`]
+      });
     });
   }
 

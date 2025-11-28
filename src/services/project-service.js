@@ -1,119 +1,202 @@
 /**
- * Project Service - LocalStorage CRUD operations for projects
+ * Project Service - Supabase CRUD operations for projects
  *
- * Projects are stored in localStorage with the following structure:
- * - gitthub_projects: Array of project objects
- * - gitthub_projects_history_{id}: Undo/redo history for each project
+ * Projects are stored in Supabase with user association.
+ * Undo/redo history is stored in localStorage (session-based).
  */
 
-const STORAGE_KEY = 'gitthub_projects';
+import { supabase } from '../lib/supabase';
+
 const HISTORY_PREFIX = 'gitthub_projects_history_';
 const MAX_HISTORY_SIZE = 50;
 
-/**
- * Generate a unique ID for projects
- */
-const generateId = () => {
-  return `project_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-};
+// ============================================================================
+// READ Operations
+// ============================================================================
 
 /**
- * Get all projects from localStorage
- * @returns {Array} Array of project objects
+ * Get all projects for the current user from Supabase
+ * @returns {Promise<Array>} Array of project objects
  */
-export const getProjects = () => {
+export const getProjects = async () => {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      console.warn('No authenticated user - returning empty projects');
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching projects:', error);
+      return [];
+    }
+
+    return data || [];
   } catch (error) {
-    console.error('Error reading projects from localStorage:', error);
+    console.error('Error in getProjects:', error);
     return [];
   }
 };
 
 /**
  * Get a single project by ID
- * @param {string} id - Project ID
- * @returns {Object|null} Project object or null if not found
+ * @param {string} id - Project ID (UUID)
+ * @returns {Promise<Object|null>} Project object or null if not found
  */
-export const getProject = (id) => {
-  const projects = getProjects();
-  return projects.find(p => p.id === id) || null;
+export const getProject = async (id) => {
+  try {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching project:', error);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error in getProject:', error);
+    return null;
+  }
 };
+
+// ============================================================================
+// WRITE Operations
+// ============================================================================
 
 /**
  * Create a new project
  * @param {Object} projectData - Project data (name, description optional)
- * @returns {Object} Created project object
+ * @returns {Promise<Object|null>} Created project object or null on error
  */
-export const createProject = (projectData = {}) => {
-  const projects = getProjects();
+export const createProject = async (projectData = {}) => {
+  try {
+    console.log('createProject: Starting...');
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-  const newProject = {
-    id: generateId(),
-    name: projectData.name || 'Untitled Project',
-    description: projectData.description || '',
-    provider: projectData.provider || 'Local',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    nodes: projectData.nodes || [],
-    edges: projectData.edges || [],
-    viewport: projectData.viewport || { x: 0, y: 0, zoom: 1 }
-  };
+    if (authError) {
+      console.error('createProject: Auth error:', authError);
+      return null;
+    }
 
-  projects.push(newProject);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+    if (!user) {
+      console.error('createProject: No authenticated user - cannot create project');
+      return null;
+    }
 
-  // Initialize empty history for the new project
-  localStorage.setItem(`${HISTORY_PREFIX}${newProject.id}`, JSON.stringify({
-    past: [],
-    future: []
-  }));
+    console.log('createProject: User found:', user.id);
 
-  return newProject;
+    const newProject = {
+      user_id: user.id,
+      name: projectData.name || 'Untitled Project',
+      description: projectData.description || '',
+      platform: projectData.platform || 'Local',
+      nodes: projectData.nodes || [],
+      edges: projectData.edges || [],
+      viewport: projectData.viewport || { x: 0, y: 0, zoom: 1 }
+    };
+
+    console.log('createProject: Inserting project:', newProject.name);
+
+    const { data, error } = await supabase
+      .from('projects')
+      .insert(newProject)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('createProject: Insert error:', error.message, error.details, error.hint);
+      return null;
+    }
+
+    console.log('createProject: Success, project id:', data.id);
+
+    // Initialize empty history for the new project
+    localStorage.setItem(`${HISTORY_PREFIX}${data.id}`, JSON.stringify({
+      past: [],
+      future: []
+    }));
+
+    return data;
+  } catch (error) {
+    console.error('createProject: Exception:', error);
+    return null;
+  }
 };
 
 /**
  * Save/update a project
  * @param {Object} project - Project object with id
- * @returns {Object} Updated project object
+ * @returns {Promise<Object|null>} Updated project object or null on error
  */
-export const saveProject = (project) => {
-  const projects = getProjects();
-  const index = projects.findIndex(p => p.id === project.id);
+export const saveProject = async (project) => {
+  try {
+    if (!project?.id) {
+      console.error('Cannot save project without ID');
+      return null;
+    }
 
-  const updatedProject = {
-    ...project,
-    updatedAt: new Date().toISOString()
-  };
+    const updateData = {
+      name: project.name,
+      description: project.description,
+      platform: project.platform || 'Local',
+      nodes: project.nodes || [],
+      edges: project.edges || [],
+      viewport: project.viewport || { x: 0, y: 0, zoom: 1 }
+    };
 
-  if (index >= 0) {
-    projects[index] = updatedProject;
-  } else {
-    projects.push(updatedProject);
+    const { data, error } = await supabase
+      .from('projects')
+      .update(updateData)
+      .eq('id', project.id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error saving project:', error);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error in saveProject:', error);
+    return null;
   }
-
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-  return updatedProject;
 };
 
 /**
  * Delete a project by ID
- * @param {string} id - Project ID
- * @returns {boolean} Success status
+ * @param {string} id - Project ID (UUID)
+ * @returns {Promise<boolean>} Success status
  */
-export const deleteProject = (id) => {
+export const deleteProject = async (id) => {
   try {
-    const projects = getProjects();
-    const filtered = projects.filter(p => p.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    const { error } = await supabase
+      .from('projects')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting project:', error);
+      return false;
+    }
 
     // Clean up history
     localStorage.removeItem(`${HISTORY_PREFIX}${id}`);
 
     return true;
   } catch (error) {
-    console.error('Error deleting project:', error);
+    console.error('Error in deleteProject:', error);
     return false;
   }
 };
@@ -121,46 +204,68 @@ export const deleteProject = (id) => {
 /**
  * Duplicate a project
  * @param {string} id - Project ID to duplicate
- * @returns {Object|null} New project object or null if source not found
+ * @returns {Promise<Object|null>} New project object or null if source not found
  */
-export const duplicateProject = (id) => {
-  const source = getProject(id);
-  if (!source) return null;
+export const duplicateProject = async (id) => {
+  try {
+    const source = await getProject(id);
+    if (!source) return null;
 
-  return createProject({
-    name: `${source.name} (Copy)`,
-    description: source.description,
-    nodes: JSON.parse(JSON.stringify(source.nodes)), // Deep clone
-    edges: JSON.parse(JSON.stringify(source.edges)),
-    viewport: { ...source.viewport }
-  });
+    return await createProject({
+      name: `${source.name} (Copy)`,
+      description: source.description,
+      platform: source.platform || 'Local',
+      nodes: JSON.parse(JSON.stringify(source.nodes || [])),
+      edges: JSON.parse(JSON.stringify(source.edges || [])),
+      viewport: { ...(source.viewport || { x: 0, y: 0, zoom: 1 }) }
+    });
+  } catch (error) {
+    console.error('Error in duplicateProject:', error);
+    return null;
+  }
 };
+
+// ============================================================================
+// EXPORT/IMPORT Operations
+// ============================================================================
 
 /**
  * Export a project to JSON string
  * @param {string} id - Project ID
- * @returns {string|null} JSON string or null if not found
+ * @returns {Promise<string|null>} JSON string or null if not found
  */
-export const exportProject = (id) => {
-  const project = getProject(id);
+export const exportProject = async (id) => {
+  const project = await getProject(id);
   if (!project) return null;
 
-  return JSON.stringify(project, null, 2);
+  // Remove sensitive/internal fields for export
+  const exportData = {
+    name: project.name,
+    description: project.description,
+    platform: project.platform,
+    nodes: project.nodes,
+    edges: project.edges,
+    viewport: project.viewport,
+    exportedAt: new Date().toISOString()
+  };
+
+  return JSON.stringify(exportData, null, 2);
 };
 
 /**
  * Import a project from JSON string
  * @param {string} jsonString - JSON string of project data
- * @returns {Object|null} Imported project or null on error
+ * @returns {Promise<Object|null>} Imported project or null on error
  */
-export const importProject = (jsonString) => {
+export const importProject = async (jsonString) => {
   try {
     const projectData = JSON.parse(jsonString);
 
-    // Create a new project with imported data but new ID
-    return createProject({
+    // Create a new project with imported data
+    return await createProject({
       name: projectData.name || 'Imported Project',
       description: projectData.description || '',
+      platform: projectData.platform || 'Local',
       nodes: projectData.nodes || [],
       edges: projectData.edges || [],
       viewport: projectData.viewport || { x: 0, y: 0, zoom: 1 }
@@ -170,6 +275,10 @@ export const importProject = (jsonString) => {
     return null;
   }
 };
+
+// ============================================================================
+// HISTORY Operations (localStorage - session-based)
+// ============================================================================
 
 /**
  * Save history state for undo/redo
@@ -280,23 +389,32 @@ export const canRedo = (projectId) => {
   }
 };
 
+// ============================================================================
+// UTILITY Functions
+// ============================================================================
+
 /**
  * Get project count statistics
- * @returns {Object} { total, recentCount }
+ * @returns {Promise<Object>} { total, recentCount }
  */
-export const getProjectStats = () => {
-  const projects = getProjects();
-  const oneWeekAgo = new Date();
-  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+export const getProjectStats = async () => {
+  try {
+    const projects = await getProjects();
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-  const recentCount = projects.filter(p =>
-    new Date(p.updatedAt) > oneWeekAgo
-  ).length;
+    const recentCount = projects.filter(p =>
+      new Date(p.updated_at) > oneWeekAgo
+    ).length;
 
-  return {
-    total: projects.length,
-    recentCount
-  };
+    return {
+      total: projects.length,
+      recentCount
+    };
+  } catch (error) {
+    console.error('Error in getProjectStats:', error);
+    return { total: 0, recentCount: 0 };
+  }
 };
 
 export default {

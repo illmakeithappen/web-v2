@@ -458,7 +458,9 @@ export default function WorkflowCatalog({
           agent: workflow.metadata?.agent || 'Claude Code',
           tags: workflow.tags || [],
           created: workflow.metadata?.created_date || workflow.created_at,
-          steps: workflow.nodes || [],
+          steps: workflow.steps || [],
+          frontmatter: workflow.frontmatter,
+          content: workflow.content,
           status: workflow.metadata?.status || 'active',
           is_template: workflow.is_template,
           content_path: workflow.metadata?.content_path

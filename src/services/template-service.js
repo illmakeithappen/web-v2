@@ -1,9 +1,38 @@
 import { supabase } from '../lib/supabase';
+import { parseWorkflowSteps } from '../utils/workflow-parser';
 
 /**
  * Template Service
  * Handles fetching public templates and user instances from Supabase
  */
+
+/**
+ * Helper function to extract step titles from workflow
+ * @param {Object} workflow - Workflow object with frontmatter and content fields
+ * @returns {Array} Array of step title strings
+ */
+function extractStepTitles(workflow) {
+  if (!workflow) return [];
+
+  // Priority 1: Use frontmatter.steps array if available (from YAML frontmatter)
+  if (workflow.frontmatter?.steps && Array.isArray(workflow.frontmatter.steps)) {
+    return workflow.frontmatter.steps;
+  }
+
+  // Priority 2: Parse from content if available
+  if (workflow.content) {
+    try {
+      const parsedSteps = parseWorkflowSteps(workflow.content);
+      if (parsedSteps.length > 0) {
+        return parsedSteps.map(s => s.title || `Step ${s.step_number}`);
+      }
+    } catch (error) {
+      console.warn('Error parsing workflow steps:', error);
+    }
+  }
+
+  return [];
+}
 
 // Fetch all workflows (templates + user instances)
 export async function fetchWorkflows(userId = null, options = {}) {
@@ -34,10 +63,16 @@ export async function fetchWorkflows(userId = null, options = {}) {
 
     if (error) throw error;
 
+    // Parse steps from content for each workflow
+    const workflowsWithSteps = (data || []).map(workflow => ({
+      ...workflow,
+      steps: extractStepTitles(workflow)
+    }));
+
     return {
       success: true,
-      workflows: data || [],
-      count: data?.length || 0
+      workflows: workflowsWithSteps,
+      count: workflowsWithSteps.length
     };
   } catch (error) {
     console.error('Error fetching workflows:', error);
@@ -225,13 +260,17 @@ export async function fetchWorkflowById(id) {
       }
     }
 
+    // Parse steps from frontmatter (preferred) or content
+    const steps = extractStepTitles({ content, frontmatter });
+
     return {
       success: true,
       workflow: {
         ...data,
         content: content,
         raw_content: rawContent,
-        frontmatter: frontmatter
+        frontmatter: frontmatter,
+        steps: steps
       }
     };
   } catch (error) {

@@ -13,8 +13,8 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import dagre from 'dagre';
-import axios from 'axios';
 import { carbonColors, carbonSpacing } from '../../styles/carbonTheme';
+import docsService from '../../services/docs-service';
 import CarbonButton from '../carbon/CarbonButton';
 import {
   saveProject,
@@ -24,11 +24,14 @@ import {
   canUndo,
   canRedo
 } from '../../services/project-service';
+// fetchWorkflowById removed - using docsService.getDoc instead for slug-based IDs
 
 // Import custom node types
 import WorkflowNode from './nodes/WorkflowNode';
 import SkillNode from './nodes/SkillNode';
 import ToolNode from './nodes/ToolNode';
+import McpNode from './nodes/McpNode';
+import SubagentNode from './nodes/SubagentNode';
 import TableNode from './nodes/TableNode';
 import TextNode from './nodes/TextNode';
 import StepNode from './nodes/StepNode';
@@ -120,17 +123,49 @@ const MainContent = styled.div`
 `;
 
 const Sidebar = styled.div`
-  width: 280px;
+  width: ${props => props.$collapsed ? '48px' : '280px'};
   background: ${carbonColors.layer01};
   border-right: 1px solid ${carbonColors.ui04};
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: width 0.2s ease;
+`;
+
+const CollapsedSidebar = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: ${carbonSpacing.spacing04};
+  gap: ${carbonSpacing.spacing03};
+`;
+
+const CollapsedIcon = styled.button`
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid ${carbonColors.ui04};
+  background: ${carbonColors.field01};
+  color: ${carbonColors.text01};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 1rem;
+
+  &:hover {
+    background: ${carbonColors.hoverUI};
+    border-color: ${carbonColors.interactive01};
+  }
 `;
 
 const SidebarHeader = styled.div`
   padding: ${carbonSpacing.spacing04};
   border-bottom: 1px solid ${carbonColors.ui04};
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 `;
 
 const SidebarTitle = styled.h3`
@@ -138,6 +173,22 @@ const SidebarTitle = styled.h3`
   font-weight: 600;
   color: ${carbonColors.text01};
   margin: 0;
+`;
+
+const CollapseButton = styled.button`
+  background: transparent;
+  border: none;
+  color: ${carbonColors.text02};
+  cursor: pointer;
+  padding: ${carbonSpacing.spacing02};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: ${carbonColors.text01};
+  }
 `;
 
 const SidebarTabs = styled.div`
@@ -258,6 +309,8 @@ const nodeTypes = {
   workflow: WorkflowNode,
   skill: SkillNode,
   tool: ToolNode,
+  mcp: McpNode,
+  subagent: SubagentNode,
   table: TableNode,
   text: TextNode,
   step: StepNode,
@@ -318,32 +371,59 @@ function ProjectContentInner({ project, onBack, onDelete }) {
   const [edges, setEdges, onEdgesChange] = useEdgesState(project?.edges || []);
 
   // Sidebar state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeLibraryTab, setActiveLibraryTab] = useState('resources');
   const [workflows, setWorkflows] = useState([]);
   const [skills, setSkills] = useState([]);
-  const [tools, setTools] = useState([]);
+  const [mcpServers, setMcpServers] = useState([]);
+  const [subagents, setSubagents] = useState([]);
   const [loadingResources, setLoadingResources] = useState(false);
 
   // History state
   const [canUndoState, setCanUndoState] = useState(false);
   const [canRedoState, setCanRedoState] = useState(false);
 
-  // Fetch available resources
+  // Fetch available resources from docsService
   useEffect(() => {
     const fetchResources = async () => {
       setLoadingResources(true);
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
       try {
-        const [workflowsRes, skillsRes, toolsRes] = await Promise.all([
-          axios.get(`${backendUrl}/api/v1/workflow/list`).catch(() => ({ data: { workflows: [] } })),
-          axios.get(`${backendUrl}/api/v1/skills`).catch(() => ({ data: { skills: [] } })),
-          axios.get(`${backendUrl}/api/v1/tools`).catch(() => ({ data: { tools: [] } }))
+        const [workflowsRes, skillsRes, mcpRes, subagentsRes] = await Promise.all([
+          docsService.listSection('workflows').catch(() => ({ items: [] })),
+          docsService.listSection('skills').catch(() => ({ items: [] })),
+          docsService.listSection('mcp').catch(() => ({ items: [] })),
+          docsService.listSection('subagents').catch(() => ({ items: [] }))
         ]);
 
-        setWorkflows(workflowsRes.data.workflows || []);
-        setSkills(skillsRes.data.skills || []);
-        setTools(toolsRes.data.tools || []);
+        // Transform items to expected format
+        setWorkflows((workflowsRes.items || []).map(item => ({
+          workflow_id: item.id,
+          title: item.name,
+          type: item.category || 'workflow',
+          description: item.description
+        })));
+
+        setSkills((skillsRes.items || []).map(item => ({
+          skill_id: item.id,
+          skill_name: item.name,
+          skill_type: item.category || 'skill',
+          description: item.description
+        })));
+
+        setMcpServers((mcpRes.items || []).map(item => ({
+          mcp_id: item.id,
+          name: item.name,
+          category: item.category || 'mcp',
+          description: item.description
+        })));
+
+        setSubagents((subagentsRes.items || []).map(item => ({
+          subagent_id: item.id,
+          name: item.name,
+          category: item.category || 'subagent',
+          description: item.description
+        })));
       } catch (error) {
         console.error('Error fetching resources:', error);
       } finally {
@@ -380,7 +460,7 @@ function ProjectContentInner({ project, onBack, onDelete }) {
   }, [nodes, edges, projectName]);
 
   // Save project
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!project?.id) return;
 
     setIsSaving(true);
@@ -396,7 +476,7 @@ function ProjectContentInner({ project, onBack, onDelete }) {
       viewport: reactFlowInstance?.getViewport() || { x: 0, y: 0, zoom: 1 }
     };
 
-    saveProject(updatedProject);
+    await saveProject(updatedProject);
     setIsSaved(true);
     setIsSaving(false);
     updateHistoryState();
@@ -488,26 +568,90 @@ function ProjectContentInner({ project, onBack, onDelete }) {
       };
 
       // Special handling for workflow drops - auto-create step nodes
-      if (data.type === 'workflow' && data.item?.workflow_id) {
+      if (data.type === 'workflow' && (data.item?.id || data.item?.workflow_id)) {
+        // IMPORTANT: Use manifest ID first (data.item.id matches folder name)
+        // Frontmatter's workflow_id may not match the folder structure
+        const workflowId = data.item.id || data.item.workflow_id;
+        const workflowNodeId = `workflow-${Date.now()}`;
+
+        console.log('[Workflow Drop] Starting with workflowId:', workflowId);
+        console.log('[Workflow Drop] data.item:', JSON.stringify(data.item, null, 2));
+
+        // Start with sidebar data as base (always available)
+        let fullWorkflow = {
+          ...data.item,
+          title: data.item.title || data.item.name || 'Workflow',
+          description: data.item.description || '',
+          content: '',
+          frontmatter: {},
+          steps: []
+        };
+
+        // Try to fetch full content for better step parsing
         try {
-          // Fetch full workflow details including markdown content
-          const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-          const response = await axios.get(`${backendUrl}/api/v1/workflow/${data.item.workflow_id}`);
+          console.log('[Workflow Drop] Fetching doc for workflowId:', workflowId);
+          const docResult = await docsService.getDoc('workflows', workflowId);
+          console.log('[Workflow Drop] docResult:', docResult ? 'Found' : 'Not found');
+          console.log('[Workflow Drop] frontmatter.steps:', docResult?.frontmatter?.steps);
+          if (docResult) {
+            fullWorkflow = {
+              ...fullWorkflow,
+              ...docResult.metadata,
+              content: docResult.content || '',
+              raw_content: docResult.raw || '',
+              frontmatter: docResult.frontmatter || {},
+              title: docResult.metadata?.name || docResult.frontmatter?.name || fullWorkflow.title,
+              description: docResult.metadata?.description || docResult.frontmatter?.description || fullWorkflow.description,
+              steps: docResult.frontmatter?.steps || []
+            };
+            console.log('[Workflow Drop] fullWorkflow.steps after fetch:', fullWorkflow.steps);
+          }
+        } catch (err) {
+          console.warn('[Workflow Drop] Could not fetch full workflow content:', err.message);
+          // Continue with sidebar data - don't bail out
+        }
 
-          if (response.data.success) {
-            const fullWorkflow = response.data.workflow;
+        // Create parent workflow node (always created)
+        const workflowNode = {
+          id: workflowNodeId,
+          type: 'workflow',
+          position,
+          data: {
+            ...fullWorkflow,
+            id: workflowNodeId,
+            label: fullWorkflow.title,
+            expanded: true,
+            onDelete: handleCascadingDelete,
+            onDataChange: (nodeId, newData) => {
+              setNodes((nds) =>
+                nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...newData } } : n))
+              );
+            },
+          },
+        };
 
-            // Create parent workflow node
-            const workflowNodeId = `workflow-${Date.now()}`;
-            const workflowNode = {
-              id: workflowNodeId,
-              type: 'workflow',
-              position,
+        // Parse steps from content OR use frontmatter steps array
+        console.log('[Workflow Drop] Parsing steps with content length:', fullWorkflow.content?.length, 'and stepTitles:', fullWorkflow.steps);
+        const steps = parseWorkflowSteps(fullWorkflow.content, fullWorkflow.steps);
+        console.log('[Workflow Drop] Parsed steps:', steps.length, steps.map(s => s.title));
+
+        if (steps.length > 0) {
+          console.log('[Workflow Drop] Creating', steps.length, 'step nodes');
+
+          // Calculate positions for step nodes
+          const stepPositions = calculateStepPositions(position, steps.length);
+
+          // Create step nodes
+          const stepNodes = steps.map((step, index) => {
+            const stepNodeId = `step-${workflowNodeId}-${index}`;
+            return {
+              id: stepNodeId,
+              type: 'step',
+              position: stepPositions[index],
               data: {
-                ...fullWorkflow,
-                id: workflowNodeId, // Store ID in data as well
-                label: fullWorkflow.title,
-                expanded: true, // Mark as expanded
+                ...step,
+                id: stepNodeId,
+                parentId: workflowNodeId,
                 onDelete: handleCascadingDelete,
                 onDataChange: (nodeId, newData) => {
                   setNodes((nds) =>
@@ -516,74 +660,59 @@ function ProjectContentInner({ project, onBack, onDelete }) {
                 },
               },
             };
+          });
 
-            // Parse steps from markdown content
-            const steps = parseWorkflowSteps(fullWorkflow.content, fullWorkflow.steps);
+          // Infer connections between steps
+          const connections = inferStepConnections(steps);
 
-            if (steps.length > 0) {
-              // Calculate positions for step nodes
-              const stepPositions = calculateStepPositions(position, steps.length);
+          // Create edges from workflow header to each step node
+          const headerToStepEdges = steps.map((step, index) => ({
+            id: `edge-header-${workflowNodeId}-${index}`,
+            source: workflowNodeId,
+            target: `step-${workflowNodeId}-${index}`,
+            type: 'smoothstep',
+            animated: true,
+            style: {
+              stroke: carbonColors.interactive01 || '#0053b6',
+              strokeWidth: 2,
+            },
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              color: carbonColors.interactive01 || '#0053b6',
+            },
+          }));
 
-              // Create step nodes
-              const stepNodes = steps.map((step, index) => {
-                const stepNodeId = `step-${workflowNodeId}-${index}`;
-                return {
-                  id: stepNodeId,
-                  type: 'step',
-                  position: stepPositions[index],
-                  data: {
-                    ...step,
-                    id: stepNodeId, // Store ID in data as well
-                    parentId: workflowNodeId, // Link to parent workflow
-                    onDelete: handleCascadingDelete,
-                    onDataChange: (nodeId, newData) => {
-                      setNodes((nds) =>
-                        nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...newData } } : n))
-                      );
-                    },
-                  },
-                };
-              });
+          // Create edges for inter-step connections (sequential flow)
+          const interStepEdges = connections.map(conn => ({
+            id: `edge-${workflowNodeId}-${conn.sourceStep}-${conn.targetStep}`,
+            source: `step-${workflowNodeId}-${conn.sourceStep}`,
+            target: `step-${workflowNodeId}-${conn.targetStep}`,
+            sourceHandle: `output-${conn.sourceHandle}`,
+            targetHandle: `input-${conn.targetHandle}`,
+            type: conn.type === 'sequential' ? 'default' : 'smoothstep',
+            animated: conn.type !== 'sequential',
+            style: {
+              stroke: conn.type === 'sequential' ? carbonColors.ui04 : '#00539B',
+              strokeWidth: conn.type === 'sequential' ? 1 : 2,
+              strokeDasharray: conn.type === 'sequential' ? '5,5' : 'none',
+            },
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              color: conn.type === 'sequential' ? carbonColors.ui04 : '#00539B',
+            },
+            label: conn.label && conn.type !== 'sequential' ? conn.label : undefined,
+          }));
 
-              // Infer connections between steps
-              const connections = inferStepConnections(steps);
+          // Combine all edges: header-to-step + inter-step
+          const allEdges = [...headerToStepEdges, ...interStepEdges];
 
-              // Create edges for step connections
-              const stepEdges = connections.map(conn => ({
-                id: `edge-${workflowNodeId}-${conn.sourceStep}-${conn.targetStep}`,
-                source: `step-${workflowNodeId}-${conn.sourceStep}`,
-                target: `step-${workflowNodeId}-${conn.targetStep}`,
-                sourceHandle: `output-${conn.sourceHandle}`,
-                targetHandle: `input-${conn.targetHandle}`,
-                type: conn.type === 'sequential' ? 'default' : 'smoothstep',
-                animated: conn.type !== 'sequential',
-                style: {
-                  stroke: conn.type === 'sequential' ? carbonColors.ui04 : '#00539B',
-                  strokeWidth: conn.type === 'sequential' ? 1 : 2,
-                  strokeDasharray: conn.type === 'sequential' ? '5,5' : 'none',
-                },
-                markerEnd: {
-                  type: MarkerType.ArrowClosed,
-                  color: conn.type === 'sequential' ? carbonColors.ui04 : '#00539B',
-                },
-                label: conn.label && conn.type !== 'sequential' ? conn.label : undefined,
-              }));
-
-              // Add all nodes (workflow + steps) and edges
-              setNodes((nds) => nds.concat([workflowNode, ...stepNodes]));
-              setEdges((eds) => eds.concat(stepEdges));
-            } else {
-              // No steps found, just add workflow node
-              setNodes((nds) => nds.concat(workflowNode));
-            }
-          } else {
-            // Fallback if API call fails - create simple workflow node
-            createSimpleNode(data, position, handleCascadingDelete);
-          }
-        } catch (error) {
-          console.error('Error fetching workflow details:', error);
-          // Fallback - create simple workflow node
-          createSimpleNode(data, position, handleCascadingDelete);
+          // Add all nodes (workflow + steps) and edges
+          setNodes((nds) => nds.concat([workflowNode, ...stepNodes]));
+          setEdges((eds) => eds.concat(allEdges));
+        } else {
+          // No steps found, just add workflow node
+          console.log('No steps found for workflow, adding header only');
+          setNodes((nds) => nds.concat(workflowNode));
         }
       } else {
         // For non-workflow items, create simple node
@@ -694,109 +823,170 @@ function ProjectContentInner({ project, onBack, onDelete }) {
       {/* Main Content */}
       <MainContent>
         {/* Sidebar */}
-        <Sidebar>
-          <SidebarHeader>
-            <SidebarTitle>Resource Library</SidebarTitle>
-          </SidebarHeader>
+        <Sidebar $collapsed={sidebarCollapsed}>
+          {sidebarCollapsed ? (
+            /* Collapsed state - show icons */
+            <CollapsedSidebar>
+              <CollapsedIcon
+                onClick={() => setSidebarCollapsed(false)}
+                title="Expand Library"
+              >
+                &#x2261;
+              </CollapsedIcon>
+              <CollapsedIcon
+                onClick={() => { setSidebarCollapsed(false); setActiveLibraryTab('resources'); }}
+                title="Resources"
+                style={{ fontSize: '0.875rem' }}
+              >
+                &#x1F4DA;
+              </CollapsedIcon>
+              <CollapsedIcon
+                onClick={() => { setSidebarCollapsed(false); setActiveLibraryTab('primitives'); }}
+                title="Primitives"
+                style={{ fontSize: '0.875rem' }}
+              >
+                &#x25A6;
+              </CollapsedIcon>
+            </CollapsedSidebar>
+          ) : (
+            /* Expanded state - show full content */
+            <>
+              <SidebarHeader>
+                <SidebarTitle>Resource Library</SidebarTitle>
+                <CollapseButton
+                  onClick={() => setSidebarCollapsed(true)}
+                  title="Collapse Library"
+                >
+                  &#x276E;
+                </CollapseButton>
+              </SidebarHeader>
 
-          <SidebarTabs>
-            <SidebarTab
-              $active={activeLibraryTab === 'resources'}
-              onClick={() => setActiveLibraryTab('resources')}
-            >
-              Resources
-            </SidebarTab>
-            <SidebarTab
-              $active={activeLibraryTab === 'primitives'}
-              onClick={() => setActiveLibraryTab('primitives')}
-            >
-              Primitives
-            </SidebarTab>
-          </SidebarTabs>
+              <SidebarTabs>
+                <SidebarTab
+                  $active={activeLibraryTab === 'resources'}
+                  onClick={() => setActiveLibraryTab('resources')}
+                >
+                  Resources
+                </SidebarTab>
+                <SidebarTab
+                  $active={activeLibraryTab === 'primitives'}
+                  onClick={() => setActiveLibraryTab('primitives')}
+                >
+                  Primitives
+                </SidebarTab>
+              </SidebarTabs>
 
-          <SidebarContent>
-            {loadingResources && (
-              <div style={{ textAlign: 'center', color: carbonColors.text02, padding: carbonSpacing.spacing05 }}>
-                Loading resources...
-              </div>
-            )}
+              <SidebarContent>
+                {loadingResources && (
+                  <div style={{ textAlign: 'center', color: carbonColors.text02, padding: carbonSpacing.spacing05 }}>
+                    Loading resources...
+                  </div>
+                )}
 
-            {activeLibraryTab === 'resources' && !loadingResources && (
-              <>
-                {/* Workflows */}
-                {workflows.length > 0 && (
+                {activeLibraryTab === 'resources' && !loadingResources && (
                   <>
-                    <ItemName style={{ marginBottom: carbonSpacing.spacing02, color: carbonColors.text02 }}>
-                      Workflows
-                    </ItemName>
-                    {workflows.slice(0, 5).map((workflow) => (
+                    {/* Workflows */}
+                    {workflows.length > 0 && (
+                      <>
+                        <ItemName style={{ marginBottom: carbonSpacing.spacing02, color: carbonColors.text02 }}>
+                          Workflows ({workflows.length})
+                        </ItemName>
+                        {workflows.slice(0, 5).map((workflow) => (
+                          <DraggableItem
+                            key={workflow.workflow_id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, workflow, 'workflow')}
+                          >
+                            <ItemName>{workflow.title}</ItemName>
+                            <ItemDescription>{workflow.type || 'Workflow'}</ItemDescription>
+                          </DraggableItem>
+                        ))}
+                      </>
+                    )}
+
+                    {/* Skills */}
+                    {skills.length > 0 && (
+                      <>
+                        <ItemName style={{ marginTop: carbonSpacing.spacing04, marginBottom: carbonSpacing.spacing02, color: carbonColors.text02 }}>
+                          Skills ({skills.length})
+                        </ItemName>
+                        {skills.slice(0, 5).map((skill) => (
+                          <DraggableItem
+                            key={skill.skill_id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, skill, 'skill')}
+                          >
+                            <ItemName>{skill.skill_name}</ItemName>
+                            <ItemDescription>{skill.skill_type || 'Skill'}</ItemDescription>
+                          </DraggableItem>
+                        ))}
+                      </>
+                    )}
+
+                    {/* MCP Servers */}
+                    {mcpServers.length > 0 && (
+                      <>
+                        <ItemName style={{ marginTop: carbonSpacing.spacing04, marginBottom: carbonSpacing.spacing02, color: carbonColors.text02 }}>
+                          MCP Servers ({mcpServers.length})
+                        </ItemName>
+                        {mcpServers.slice(0, 5).map((mcp) => (
+                          <DraggableItem
+                            key={mcp.mcp_id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, mcp, 'mcp')}
+                          >
+                            <ItemName>{mcp.name}</ItemName>
+                            <ItemDescription>{mcp.category || 'MCP Server'}</ItemDescription>
+                          </DraggableItem>
+                        ))}
+                      </>
+                    )}
+
+                    {/* Subagents */}
+                    {subagents.length > 0 && (
+                      <>
+                        <ItemName style={{ marginTop: carbonSpacing.spacing04, marginBottom: carbonSpacing.spacing02, color: carbonColors.text02 }}>
+                          Subagents ({subagents.length})
+                        </ItemName>
+                        {subagents.slice(0, 5).map((subagent) => (
+                          <DraggableItem
+                            key={subagent.subagent_id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, subagent, 'subagent')}
+                          >
+                            <ItemName>{subagent.name}</ItemName>
+                            <ItemDescription>{subagent.category || 'Subagent'}</ItemDescription>
+                          </DraggableItem>
+                        ))}
+                      </>
+                    )}
+
+                    {/* Empty state */}
+                    {workflows.length === 0 && skills.length === 0 && mcpServers.length === 0 && subagents.length === 0 && (
+                      <div style={{ textAlign: 'center', color: carbonColors.text02, padding: carbonSpacing.spacing05 }}>
+                        No resources available
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {activeLibraryTab === 'primitives' && (
+                  <>
+                    {primitiveItems.map((item) => (
                       <DraggableItem
-                        key={workflow.course_id}
+                        key={item.id}
                         draggable
-                        onDragStart={(e) => handleDragStart(e, workflow, 'workflow')}
+                        onDragStart={(e) => handleDragStart(e, item, item.type)}
                       >
-                        <ItemName>{workflow.title}</ItemName>
-                        <ItemDescription>{workflow.type || 'Workflow'}</ItemDescription>
+                        <ItemName>{item.name}</ItemName>
+                        <ItemDescription>{item.description}</ItemDescription>
                       </DraggableItem>
                     ))}
                   </>
                 )}
-
-                {/* Skills */}
-                {skills.length > 0 && (
-                  <>
-                    <ItemName style={{ marginTop: carbonSpacing.spacing04, marginBottom: carbonSpacing.spacing02, color: carbonColors.text02 }}>
-                      Skills
-                    </ItemName>
-                    {skills.slice(0, 5).map((skill) => (
-                      <DraggableItem
-                        key={skill.skill_id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, skill, 'skill')}
-                      >
-                        <ItemName>{skill.skill_name}</ItemName>
-                        <ItemDescription>{skill.skill_type || 'Skill'}</ItemDescription>
-                      </DraggableItem>
-                    ))}
-                  </>
-                )}
-
-                {/* Tools */}
-                {tools.length > 0 && (
-                  <>
-                    <ItemName style={{ marginTop: carbonSpacing.spacing04, marginBottom: carbonSpacing.spacing02, color: carbonColors.text02 }}>
-                      Tools
-                    </ItemName>
-                    {tools.slice(0, 5).map((tool) => (
-                      <DraggableItem
-                        key={tool.tool_id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, tool, 'tool')}
-                      >
-                        <ItemName>{tool.name}</ItemName>
-                        <ItemDescription>{tool.category || 'Tool'}</ItemDescription>
-                      </DraggableItem>
-                    ))}
-                  </>
-                )}
-              </>
-            )}
-
-            {activeLibraryTab === 'primitives' && (
-              <>
-                {primitiveItems.map((item) => (
-                  <DraggableItem
-                    key={item.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, item, item.type)}
-                  >
-                    <ItemName>{item.name}</ItemName>
-                    <ItemDescription>{item.description}</ItemDescription>
-                  </DraggableItem>
-                ))}
-              </>
-            )}
-          </SidebarContent>
+              </SidebarContent>
+            </>
+          )}
         </Sidebar>
 
         {/* Canvas */}
@@ -824,8 +1014,10 @@ function ProjectContentInner({ project, onBack, onDelete }) {
                     return '#0f62fe';
                   case 'skill':
                     return '#24a148';
-                  case 'tool':
+                  case 'mcp':
                     return '#8a3ffc';
+                  case 'subagent':
+                    return '#ff7eb6';
                   case 'table':
                     return '#fa4d56';
                   case 'text':

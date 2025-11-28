@@ -1335,7 +1335,10 @@ function Docs() {
               description: w.description,
               category: w.category,
               tags: w.tags || [],
-              difficulty: w.metadata?.difficulty || 'intermediate'
+              difficulty: w.metadata?.difficulty || 'intermediate',
+              steps: w.steps || [],  // Include steps extracted by template-service
+              frontmatter: w.frontmatter,  // Include frontmatter for fallback
+              content: w.content,  // Include content for parsing
             }))
           : []
 
@@ -1386,7 +1389,11 @@ function Docs() {
 
           const workflow = response.workflow
           content = workflow.content || ''
-          metadataObj = workflow.frontmatter || {}  // Use frontmatter JSONB from database
+          // Merge frontmatter with steps from template-service extraction
+          metadataObj = {
+            ...workflow.frontmatter || {},
+            steps: workflow.steps || workflow.frontmatter?.steps || [],  // Include extracted steps
+          }
           rawFrontmatterText = workflow.raw_content
             ? workflow.raw_content.match(/^---\s*\n([\s\S]*?)\n---/)?.[1] || ''
             : ''
@@ -1727,7 +1734,10 @@ function Docs() {
               description: w.description,
               category: w.category,
               tags: w.tags || [],
-              difficulty: w.metadata?.difficulty || 'intermediate'
+              difficulty: w.metadata?.difficulty || 'intermediate',
+              steps: w.steps || [],  // Include steps extracted by template-service
+              frontmatter: w.frontmatter,  // Include frontmatter for fallback
+              content: w.content,  // Include content for parsing
             }))
           : []
 
