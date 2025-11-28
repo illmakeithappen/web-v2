@@ -3,6 +3,7 @@ import styled from 'styled-components'
 import JSZip from 'jszip'
 import { supabase } from '../../lib/supabase'
 import { parseFrontmatter, serializeMarkdown } from '../../services/content-edit-service'
+import { storageService } from '../../services/storage-service'
 
 // Styled components (reused from UploadDocModal)
 const ModalOverlay = styled.div`
@@ -535,8 +536,30 @@ function SupabaseUploadModal({ isOpen, onClose, activeSection, onUploadComplete 
       }
 
       if (!mainFile) {
-        const structure = allFiles.map(f => basePath ? f.replace(basePath, '') : f).join(', ')
-        throw new Error(`ZIP must contain a ${mainFileName} file. Found structure: ${structure}`)
+        // Check if a different entity type was found
+        const entityTypes = {
+          'WORKFLOW.md': 'workflow',
+          'SKILL.md': 'skill',
+          'MCP.md': 'mcp',
+          'SUBAGENT.md': 'subagent'
+        }
+        const foundEntityFile = allFiles.find(f => {
+          const basename = f.split('/').pop()
+          return Object.keys(entityTypes).includes(basename)
+        })
+
+        if (foundEntityFile) {
+          const foundBasename = foundEntityFile.split('/').pop()
+          const foundType = entityTypes[foundBasename]
+          const expectedType = section === 'workflows' ? 'workflow'
+            : section === 'skills' ? 'skill'
+            : section === 'mcp' ? 'mcp'
+            : section === 'subagents' ? 'subagent'
+            : section
+          throw new Error(`Trying to upload a ${foundType} to the ${expectedType}s section`)
+        }
+
+        throw new Error(`ZIP must contain a ${mainFileName} file`)
       }
 
       // Validate main file is markdown
@@ -724,62 +747,28 @@ function SupabaseUploadModal({ isOpen, onClose, activeSection, onUploadComplete 
 
       setUploadProgress(`Creating ${section.slice(0, -1)}...`)
 
-      // Check if record with same name already exists for this user
-      const { data: existingRecords } = await supabase
-        .from(table)
-        .select('id, name')
-        .eq('name', name.trim())
-        .eq('user_id', user.id)
+      // Always create a new record (don't overwrite existing)
+      console.log(`Creating new ${section.slice(0, -1)}: ${name.trim()}`)
 
-      let newRecord
-
-      if (existingRecords && existingRecords.length > 0) {
-        // Update existing record
-        console.log(`Updating existing ${section.slice(0, -1)}: ${name.trim()}`)
-        setUploadProgress(`Updating existing ${section.slice(0, -1)}...`)
-
-        const { data: updatedRecord, error: updateError } = await supabase
-          .from(table)
-          .update({
-            description: mainFile.frontmatter.description || '',
-            category: mainFile.frontmatter.category || 'general',
-            content: mainFile.content,
-            raw_content: serializeMarkdown(mainFile.frontmatter, mainFile.content),
-            frontmatter: mainFile.frontmatter,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingRecords[0].id)
-          .select()
-          .single()
-
-        if (updateError) throw updateError
-        newRecord = updatedRecord
-        console.log('Updated record:', newRecord)
-      } else {
-        // Create new record
-        console.log(`Creating new ${section.slice(0, -1)}: ${name.trim()}`)
-
-        const insertData = {
-          name: name.trim(),
-          description: mainFile.frontmatter.description || '',
-          category: mainFile.frontmatter.category || 'general',
-          content: mainFile.content,
-          raw_content: serializeMarkdown(mainFile.frontmatter, mainFile.content),
-          frontmatter: mainFile.frontmatter,
-          is_template: false,
-          user_id: user.id
-        }
-
-        const { data: createdRecord, error: createError } = await supabase
-          .from(table)
-          .insert(insertData)
-          .select()
-          .single()
-
-        if (createError) throw createError
-        newRecord = createdRecord
-        console.log('Created record:', newRecord)
+      const insertData = {
+        name: name.trim(),
+        description: mainFile.frontmatter.description || '',
+        category: mainFile.frontmatter.category || 'general',
+        content: mainFile.content,
+        raw_content: serializeMarkdown(mainFile.frontmatter, mainFile.content),
+        frontmatter: mainFile.frontmatter,
+        is_template: false,
+        user_id: user.id
       }
+
+      const { data: newRecord, error: createError } = await supabase
+        .from(table)
+        .insert(insertData)
+        .select()
+        .single()
+
+      if (createError) throw createError
+      console.log('Created record:', newRecord)
 
       // Upload references if any
       if (references.length > 0) {
@@ -790,7 +779,7 @@ function SupabaseUploadModal({ isOpen, onClose, activeSection, onUploadComplete 
         for (let i = 0; i < references.length; i++) {
           const ref = references[i]
 
-          // Build reference data object
+          // Build reference data object (core fields only)
           const refData = {
             parent_type: contentType,
             parent_id: newRecord.id,
@@ -806,15 +795,12 @@ function SupabaseUploadModal({ isOpen, onClose, activeSection, onUploadComplete 
             order_index: i
           }
 
-          // Add file type metadata if migration 004 has been applied
-          // TODO: Remove this check once migration 004 is confirmed applied
-          try {
-            refData.file_type = ref.extension
-            refData.is_markdown = ref.isMarkdown
-          } catch (e) {
-            // Columns don't exist yet, skip them
-            console.warn('file_type and is_markdown columns not available yet - run migration 004')
-          }
+          // Add optional columns if migrations have been applied
+          // file_path: stores subdirectory structure (migration 006)
+          // file_type/is_markdown: file type metadata (migration 004)
+          refData.file_path = ref.path  // Will be ignored if column doesn't exist
+          refData.file_type = ref.extension
+          refData.is_markdown = ref.isMarkdown
 
           // Use upsert to handle both new and existing references
           const { error: refError } = await supabase
@@ -826,8 +812,12 @@ function SupabaseUploadModal({ isOpen, onClose, activeSection, onUploadComplete 
           if (refError) {
             console.error(`Failed to upload reference ${ref.filename}:`, refError)
 
-            // Check if it's an RLS policy violation
-            if (refError.code === 'PGRST301' || refError.message?.includes('policy') || refError.message?.includes('permission')) {
+            // Check for specific error types
+            if (refError.message?.includes('schema cache') || refError.message?.includes('Could not find')) {
+              // Missing column - need to run migrations
+              const missingCol = refError.message.match(/'(\w+)' column/)?.[1] || 'unknown'
+              setError(`Database schema needs updating. Missing column: ${missingCol}. Please run migrations 004-006 in Supabase SQL Editor.`)
+            } else if (refError.code === 'PGRST301' || refError.message?.includes('policy') || refError.message?.includes('permission')) {
               setError(`Permission denied: You don't have access to upload references for this ${contentType}. Please ensure you're logged in as the owner.`)
             } else {
               setError(`Failed to upload reference file "${ref.filename}": ${refError.message || 'Unknown error'}`)
@@ -838,6 +828,22 @@ function SupabaseUploadModal({ isOpen, onClose, activeSection, onUploadComplete 
             setUploadProgress('')
             return
           }
+        }
+      }
+
+      // Upload original file to Supabase Storage bucket
+      if (file && newRecord?.id) {
+        setUploadProgress('Uploading file to storage...')
+        const { error: storageError } = await storageService.uploadFile(
+          section,
+          newRecord.id,
+          file
+        )
+        if (storageError) {
+          console.warn('Storage upload failed (bucket may not exist):', storageError)
+          // Don't fail the entire upload if storage fails - database content is already saved
+        } else {
+          console.log('File uploaded to storage:', `${section}/${newRecord.id}/${file.name}`)
         }
       }
 

@@ -264,23 +264,49 @@ export function parseFrontmatter(rawMarkdown) {
   const yamlStr = frontmatterMatch[1];
   const content = frontmatterMatch[2].trim();
   const frontmatter = {};
+  let currentKey = null;
+  let inArray = false;
 
-  // Simple YAML parser (handles basic key: value pairs)
+  // YAML parser that handles arrays and basic key: value pairs
   yamlStr.split('\n').forEach(line => {
+    // Check for array item (starts with -)
+    if (line.match(/^\s+-\s+/)) {
+      if (currentKey && inArray) {
+        const value = line.replace(/^\s+-\s+/, '').trim().replace(/^["']|["']$/g, '');
+        if (!Array.isArray(frontmatter[currentKey])) {
+          frontmatter[currentKey] = [];
+        }
+        frontmatter[currentKey].push(value);
+      }
+      return;
+    }
+
+    // Check for key: value
     const colonIndex = line.indexOf(':');
     if (colonIndex > 0 && !line.startsWith(' ') && !line.startsWith('#')) {
-      const key = line.slice(0, colonIndex).trim();
+      currentKey = line.slice(0, colonIndex).trim();
       let value = line.slice(colonIndex + 1).trim();
 
-      // Remove quotes
-      value = value.replace(/^["']|["']$/g, '');
+      // Handle inline arrays [item1, item2, ...]
+      if (value.startsWith('[') && value.endsWith(']')) {
+        frontmatter[currentKey] = value.slice(1, -1).split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+        inArray = false;
+      } else if (value === '' || value === '|' || value === '>') {
+        // Start of array or multiline - initialize as array
+        inArray = true;
+        frontmatter[currentKey] = [];
+      } else {
+        // Remove quotes
+        value = value.replace(/^["']|["']$/g, '');
 
-      // Try to parse as number
-      if (!isNaN(value) && value !== '') {
-        value = parseFloat(value);
+        // Try to parse as number
+        if (!isNaN(value) && value !== '') {
+          value = parseFloat(value);
+        }
+
+        frontmatter[currentKey] = value;
+        inArray = false;
       }
-
-      frontmatter[key] = value;
     }
   });
 
@@ -295,9 +321,17 @@ export function serializeMarkdown(frontmatter, content) {
 
   let yamlStr = '---\n';
   Object.entries(frontmatter).forEach(([key, value]) => {
-    // Quote string values
-    const quotedValue = typeof value === 'string' ? `"${value}"` : value;
-    yamlStr += `${key}: ${quotedValue}\n`;
+    if (Array.isArray(value)) {
+      // Handle arrays - use YAML list format
+      yamlStr += `${key}:\n`;
+      value.forEach(item => {
+        yamlStr += `  - ${item}\n`;
+      });
+    } else {
+      // Quote string values
+      const quotedValue = typeof value === 'string' ? `"${value}"` : value;
+      yamlStr += `${key}: ${quotedValue}\n`;
+    }
   });
   yamlStr += '---\n\n';
 

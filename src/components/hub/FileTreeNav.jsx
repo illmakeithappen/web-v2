@@ -8,7 +8,7 @@ const FileTree = styled.div`
   background: transparent;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 `;
 
 const CommandPaletteTrigger = styled.button`
@@ -59,7 +59,7 @@ const TriggerShortcut = styled.span`
 
 const FileTreeContent = styled.div`
   flex: 1;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
 `;
@@ -277,6 +277,105 @@ const NoResultsText = styled.div`
   text-align: center;
 `;
 
+const BackRowContainer = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+`;
+
+const UploadButtonRow = styled.div`
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0 0 8px 0;
+  margin-bottom: 4px;
+`;
+
+const BackLink = styled.span`
+  color: #666;
+  font-style: italic;
+  font-size: 0.85rem;
+  font-family: 'IBM Plex Mono', 'Courier New', monospace;
+  cursor: pointer;
+
+  &:hover {
+    color: #333;
+  }
+`;
+
+const NavActionButton = styled.button`
+  padding: 4px 10px;
+  background: white;
+  border: 1px solid ${props => props.$danger ? '#ffcdd2' : '#d0d7de'};
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: ${props => props.$danger ? '#c62828' : '#24292f'};
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: 'IBM Plex Mono', 'Courier New', monospace;
+
+  &:hover {
+    background: ${props => props.$danger ? '#ffebee' : '#f6f8fa'};
+    border-color: ${props => props.$danger ? '#c62828' : '#0969da'};
+    color: ${props => props.$danger ? '#b71c1c' : '#0969da'};
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const OverviewContainer = styled.div`
+  padding: 10px 12px;
+  background: rgba(255, 165, 0, 0.15);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+`;
+
+const OverviewTitle = styled.div`
+  font-size: 0.85rem;
+  font-family: 'IBM Plex Mono', 'Courier New', monospace;
+  color: #2C2C2C;
+  margin-bottom: 8px;
+`;
+
+const OverviewDate = styled.div`
+  font-size: 0.7rem;
+  color: #888;
+  margin-bottom: 4px;
+`;
+
+const DownloadButton = styled.button`
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid #d0d7de;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #24292f;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: 'IBM Plex Mono', 'Courier New', monospace;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  &:hover:not(:disabled) {
+    background: #f6f8fa;
+    border-color: #0969da;
+    color: #0969da;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
 const StepItem = styled.li`
   padding: 6px 12px 6px 28px;
   font-size: 0.8rem;
@@ -341,6 +440,13 @@ export default function FileTreeNav({
   availableMcp = [],
   availableSubagents = [],
   onItemSelectFromList,
+  // Upload/Download/Delete props
+  user,
+  onUploadClick,
+  onDeleteClick,
+  onDownloadClick,
+  isDownloading = false,
+  downloadError = null,
 }) {
   // Search state for expanded lists
   const [workflowSearchQuery, setWorkflowSearchQuery] = useState('');
@@ -399,7 +505,7 @@ export default function FileTreeNav({
         {/* Show list when no item selected, show single selected item when one is active */}
         {['workflows', 'skills', 'mcp', 'subagents'].includes(selectedSection) ? (
           activeTab ? (
-            // Show only the selected workflow item
+            // Show only the selected workflow item with back link and actions
             <ExpandedWorkflowContainer>
               <WorkflowScrollList>
                 {(() => {
@@ -413,25 +519,26 @@ export default function FileTreeNav({
                   const dateStr = selectedSection === 'workflows' ? formatWorkflowDate(selectedItem.id) : null;
                   return (
                     <>
-                      <WorkflowListItem
-                        key="back"
-                        onClick={() => onSectionChange(selectedSection, null)}
-                        style={{
-                          background: 'rgba(0, 0, 0, 0.03)',
-                          color: '#666',
-                          fontStyle: 'italic',
-                          borderBottom: '1px solid rgba(0, 0, 0, 0.15)'
-                        }}
-                      >
-                        <WorkflowTitle>← All {sectionLabels[selectedSection]}s</WorkflowTitle>
-                      </WorkflowListItem>
-                      <WorkflowListItem
-                        key={selectedItem.id}
-                        style={{ background: 'rgba(255, 165, 0, 0.15)' }}
-                      >
-                        {dateStr && <WorkflowDate>{dateStr}</WorkflowDate>}
-                        <WorkflowTitle>{selectedItem.name}</WorkflowTitle>
-                      </WorkflowListItem>
+                      {/* Back row */}
+                      <BackRowContainer>
+                        <BackLink onClick={() => onSectionChange(selectedSection, null)}>
+                          ← All {sectionLabels[selectedSection]}s
+                        </BackLink>
+                      </BackRowContainer>
+
+                      {/* Overview with download */}
+                      <OverviewContainer>
+                        {dateStr && <OverviewDate>{dateStr}</OverviewDate>}
+                        <OverviewTitle>{selectedItem.name}</OverviewTitle>
+                        {onDownloadClick && (
+                          <DownloadButton
+                            onClick={onDownloadClick}
+                            disabled={isDownloading}
+                          >
+                            {isDownloading ? '...' : downloadError ? `⚠ ${downloadError}` : '↓ Download'}
+                          </DownloadButton>
+                        )}
+                      </OverviewContainer>
                     </>
                   );
                 })()}
@@ -440,6 +547,18 @@ export default function FileTreeNav({
           ) : (
             // Show full searchable list when no item selected
             <ExpandedWorkflowContainer>
+              {user && onUploadClick && (
+                <UploadButtonRow>
+                  <NavActionButton onClick={onUploadClick}>
+                    + Upload
+                  </NavActionButton>
+                  {onDeleteClick && (
+                    <NavActionButton onClick={onDeleteClick} $danger>
+                      - Delete
+                    </NavActionButton>
+                  )}
+                </UploadButtonRow>
+              )}
               <WorkflowSearchInput
                 type="text"
                 placeholder={`Search ${sectionLabels[selectedSection]}s...`}

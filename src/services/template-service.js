@@ -283,7 +283,7 @@ export async function fetchWorkflowById(id) {
   }
 }
 
-// Fetch single skill by ID
+// Fetch single skill by ID with content and references
 export async function fetchSkillById(id) {
   try {
     const { data, error } = await supabase
@@ -293,6 +293,18 @@ export async function fetchSkillById(id) {
       .single();
 
     if (error) throw error;
+
+    // Fetch references if they exist
+    const { data: references, error: refError } = await supabase
+      .from('content_references')
+      .select('*')
+      .eq('parent_type', 'skill')
+      .eq('parent_id', id)
+      .order('order_index', { ascending: true });
+
+    if (refError) {
+      console.warn('Error fetching skill references:', refError);
+    }
 
     // Content is now stored directly in the database
     const content = data.content || '';
@@ -305,7 +317,8 @@ export async function fetchSkillById(id) {
         ...data,
         content: content,
         raw_content: rawContent,
-        frontmatter: frontmatter
+        frontmatter: frontmatter,
+        references: references || []
       }
     };
   } catch (error) {

@@ -53,20 +53,16 @@ const DropdownArrow = styled.span`
 `;
 
 const DropdownMenu = styled.div`
-  position: absolute;
-  top: calc(100% - 4px);
-  left: ${carbonSpacing.spacing03};
-  right: ${carbonSpacing.spacing03};
+  position: fixed;
   background: white;
   border: 1px solid rgba(0, 0, 0, 0.15);
   border-radius: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 100;
-  overflow: hidden;
+  z-index: 9999;
   opacity: ${props => props.$open ? 1 : 0};
   visibility: ${props => props.$open ? 'visible' : 'hidden'};
   transform: ${props => props.$open ? 'translateY(0)' : 'translateY(-8px)'};
-  transition: all 0.2s ease;
+  transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease;
 `;
 
 const DropdownItem = styled.button`
@@ -127,7 +123,9 @@ const SectionTabBar = ({
   subagentCount = 0
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, width: 0 });
   const containerRef = useRef(null);
+  const buttonRef = useRef(null);
 
   const tabs = [
     { id: 'readme', label: 'README' },
@@ -138,6 +136,18 @@ const SectionTabBar = ({
   ];
 
   const activeTab = tabs.find(tab => tab.id === activeSection) || tabs[0];
+
+  // Update menu position when opening
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setMenuPosition({
+        top: rect.bottom - 4,
+        left: rect.left,
+        width: rect.width
+      });
+    }
+  }, [isOpen]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -171,16 +181,26 @@ const SectionTabBar = ({
   return (
     <DropdownContainer ref={containerRef}>
       <SelectedSection
+        ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
-        <SectionLabel>{activeTab.label}</SectionLabel>
-        {activeTab.count > 0 && <SectionCount>({activeTab.count})</SectionCount>}
+        <SectionLabel>
+          {activeTab.label}{activeTab.count > 0 ? ` (${activeTab.count})` : ''}
+        </SectionLabel>
         <DropdownArrow $open={isOpen}>▼</DropdownArrow>
       </SelectedSection>
 
-      <DropdownMenu $open={isOpen} role="listbox">
+      <DropdownMenu
+        $open={isOpen}
+        role="listbox"
+        style={{
+          top: menuPosition.top,
+          left: menuPosition.left,
+          width: menuPosition.width
+        }}
+      >
         {tabs.map((tab) => (
           <DropdownItem
             key={tab.id}
@@ -189,8 +209,9 @@ const SectionTabBar = ({
             $active={activeSection === tab.id}
             onClick={() => handleSelect(tab.id)}
           >
-            <ItemLabel>{tab.label}</ItemLabel>
-            {tab.count > 0 && <ItemCount>({tab.count})</ItemCount>}
+            <ItemLabel>
+              {tab.label}{tab.count > 0 ? ` (${tab.count})` : ''}
+            </ItemLabel>
             {activeSection === tab.id && <ActiveIndicator />}
           </DropdownItem>
         ))}

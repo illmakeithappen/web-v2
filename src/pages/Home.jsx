@@ -426,7 +426,7 @@ function Home() {
               </TestimonialsContainer>
             </DataVisualization>
             <ButtonGroup>
-              <Button to="/doc" $primary>
+              <Button to="/doc?section=readme&tab=welcome" $primary>
                 README.md
               </Button>
             </ButtonGroup>

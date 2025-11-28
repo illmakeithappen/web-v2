@@ -7,7 +7,7 @@ import CarbonPagination from '../carbon/CarbonPagination';
 import CarbonButton from '../carbon/CarbonButton';
 import InlineFilterBar from '../carbon/InlineFilterBar';
 import { DifficultyBadge } from '../carbon/CarbonTag';
-import { fetchWorkflows } from '../../services/template-service';
+import { fetchWorkflows, fetchSkills, fetchMcpServers, fetchSubagents } from '../../services/template-service';
 import { useAuth } from '../../contexts/AuthContext';
 
 // ============================================================================
@@ -405,29 +405,79 @@ export default function WorkflowCatalog({
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  // Fetch content for skills/tools tabs via docs-service
+  // Fetch content for skills/tools tabs via template-service (Supabase)
   const fetchSection = async (section) => {
     try {
       setLoading(true);
-      const data = await docsService.listSection(section);
+      let response;
 
-      // Transform from docs format to display format
-      const transformedItems = (data.items || []).map(item => ({
-        workflow_id: item.id,
-        title: item.name,
-        description: item.description || '',
-        type: item.category || section,
-        difficulty: item.difficulty || 'intermediate',
-        duration: item.estimated_time || 'Not specified',
-        agent: item.agent || 'Claude Code',
-        tags: item.tags || [],
-        created: item.created_date,
-        steps: item.steps || [],
-        status: item.status || 'active'
-      }));
-
-      setWorkflows(transformedItems);
-      console.log(`Loaded ${section} via docs-service:`, transformedItems.length);
+      // Use Supabase-based template-service for all sections
+      if (section === 'skills') {
+        response = await fetchSkills(user?.id, { limit: 100 });
+        if (response.success) {
+          const transformedItems = response.skills.map(item => ({
+            workflow_id: item.id,
+            title: item.name,
+            description: item.description || '',
+            type: item.category || 'skill',
+            difficulty: item.metadata?.difficulty || 'intermediate',
+            duration: item.metadata?.estimated_time || 'Not specified',
+            agent: item.metadata?.agent || 'Claude Code',
+            tags: item.tags || [],
+            created: item.created_at,
+            steps: [],
+            status: 'active'
+          }));
+          setWorkflows(transformedItems);
+          console.log(`Loaded ${section} from Supabase:`, transformedItems.length);
+        } else {
+          throw new Error(response.error || 'Failed to load skills');
+        }
+      } else if (section === 'tools' || section === 'mcp') {
+        response = await fetchMcpServers(user?.id, { limit: 100 });
+        if (response.success) {
+          const transformedItems = response.mcp_servers.map(item => ({
+            workflow_id: item.id,
+            title: item.name,
+            description: item.description || '',
+            type: item.category || 'mcp',
+            difficulty: item.metadata?.difficulty || 'intermediate',
+            duration: item.metadata?.estimated_time || 'Not specified',
+            agent: item.metadata?.agent || 'Claude Code',
+            tags: item.tags || [],
+            created: item.created_at,
+            steps: [],
+            status: 'active'
+          }));
+          setWorkflows(transformedItems);
+          console.log(`Loaded ${section} from Supabase:`, transformedItems.length);
+        } else {
+          throw new Error(response.error || 'Failed to load MCP servers');
+        }
+      } else if (section === 'subagents') {
+        response = await fetchSubagents(user?.id, { limit: 100 });
+        if (response.success) {
+          const transformedItems = response.subagents.map(item => ({
+            workflow_id: item.id,
+            title: item.name,
+            description: item.description || '',
+            type: item.category || 'subagent',
+            difficulty: item.metadata?.difficulty || 'intermediate',
+            duration: item.metadata?.estimated_time || 'Not specified',
+            agent: item.metadata?.agent || 'Claude Code',
+            tags: item.tags || [],
+            created: item.created_at,
+            steps: [],
+            status: 'active'
+          }));
+          setWorkflows(transformedItems);
+          console.log(`Loaded ${section} from Supabase:`, transformedItems.length);
+        } else {
+          throw new Error(response.error || 'Failed to load subagents');
+        }
+      } else {
+        setWorkflows([]);
+      }
     } catch (err) {
       console.error(`Error fetching ${section}:`, err);
       setError(`Failed to load ${section}`);

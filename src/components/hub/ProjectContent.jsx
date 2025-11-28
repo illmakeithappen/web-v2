@@ -14,7 +14,8 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import dagre from 'dagre';
 import { carbonColors, carbonSpacing } from '../../styles/carbonTheme';
-import docsService from '../../services/docs-service';
+import { fetchWorkflows, fetchSkills, fetchMcpServers, fetchSubagents, fetchWorkflowById } from '../../services/template-service';
+import { useAuth } from '../../contexts/AuthContext';
 import CarbonButton from '../carbon/CarbonButton';
 import {
   saveProject,
@@ -24,7 +25,7 @@ import {
   canUndo,
   canRedo
 } from '../../services/project-service';
-// fetchWorkflowById removed - using docsService.getDoc instead for slug-based IDs
+// Using fetchWorkflowById from template-service for Supabase-based workflows
 
 // Import custom node types
 import WorkflowNode from './nodes/WorkflowNode';
@@ -360,6 +361,7 @@ const getLayoutedElements = (nodes, edges, direction = 'LR') => {
 function ProjectContentInner({ project, onBack, onDelete }) {
   const reactFlowWrapper = useRef(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
+  const { user } = useAuth();
 
   // Project state
   const [projectName, setProjectName] = useState(project?.name || 'Untitled Project');
@@ -383,47 +385,58 @@ function ProjectContentInner({ project, onBack, onDelete }) {
   const [canUndoState, setCanUndoState] = useState(false);
   const [canRedoState, setCanRedoState] = useState(false);
 
-  // Fetch available resources from docsService
+  // Fetch available resources from Supabase via template-service
   useEffect(() => {
     const fetchResources = async () => {
       setLoadingResources(true);
 
       try {
         const [workflowsRes, skillsRes, mcpRes, subagentsRes] = await Promise.all([
-          docsService.listSection('workflows').catch(() => ({ items: [] })),
-          docsService.listSection('skills').catch(() => ({ items: [] })),
-          docsService.listSection('mcp').catch(() => ({ items: [] })),
-          docsService.listSection('subagents').catch(() => ({ items: [] }))
+          fetchWorkflows(user?.id, { limit: 100 }).catch(() => ({ success: false, workflows: [] })),
+          fetchSkills(user?.id, { limit: 100 }).catch(() => ({ success: false, skills: [] })),
+          fetchMcpServers(user?.id, { limit: 100 }).catch(() => ({ success: false, mcp_servers: [] })),
+          fetchSubagents(user?.id, { limit: 100 }).catch(() => ({ success: false, subagents: [] }))
         ]);
 
         // Transform items to expected format
-        setWorkflows((workflowsRes.items || []).map(item => ({
+        setWorkflows((workflowsRes.workflows || []).map(item => ({
           workflow_id: item.id,
+          id: item.id, // Include both for compatibility
           title: item.name,
           type: item.category || 'workflow',
-          description: item.description
+          description: item.description,
+          content: item.content,
+          frontmatter: item.frontmatter,
+          steps: item.steps || []
         })));
 
-        setSkills((skillsRes.items || []).map(item => ({
+        setSkills((skillsRes.skills || []).map(item => ({
           skill_id: item.id,
           skill_name: item.name,
           skill_type: item.category || 'skill',
           description: item.description
         })));
 
-        setMcpServers((mcpRes.items || []).map(item => ({
+        setMcpServers((mcpRes.mcp_servers || []).map(item => ({
           mcp_id: item.id,
           name: item.name,
           category: item.category || 'mcp',
           description: item.description
         })));
 
-        setSubagents((subagentsRes.items || []).map(item => ({
+        setSubagents((subagentsRes.subagents || []).map(item => ({
           subagent_id: item.id,
           name: item.name,
           category: item.category || 'subagent',
           description: item.description
         })));
+
+        console.log('Loaded resources from Supabase:', {
+          workflows: workflowsRes.workflows?.length || 0,
+          skills: skillsRes.skills?.length || 0,
+          mcpServers: mcpRes.mcp_servers?.length || 0,
+          subagents: subagentsRes.subagents?.length || 0
+        });
       } catch (error) {
         console.error('Error fetching resources:', error);
       } finally {
@@ -432,7 +445,7 @@ function ProjectContentInner({ project, onBack, onDelete }) {
     };
 
     fetchResources();
-  }, []);
+  }, [user?.id]);
 
   // Mark as unsaved when nodes or edges change
   useEffect(() => {
@@ -587,22 +600,22 @@ function ProjectContentInner({ project, onBack, onDelete }) {
           steps: []
         };
 
-        // Try to fetch full content for better step parsing
+        // Try to fetch full content for better step parsing (from Supabase)
         try {
-          console.log('[Workflow Drop] Fetching doc for workflowId:', workflowId);
-          const docResult = await docsService.getDoc('workflows', workflowId);
-          console.log('[Workflow Drop] docResult:', docResult ? 'Found' : 'Not found');
-          console.log('[Workflow Drop] frontmatter.steps:', docResult?.frontmatter?.steps);
-          if (docResult) {
+          console.log('[Workflow Drop] Fetching workflow from Supabase for workflowId:', workflowId);
+          const result = await fetchWorkflowById(workflowId);
+          console.log('[Workflow Drop] result:', result?.success ? 'Found' : 'Not found');
+          if (result?.success && result?.workflow) {
+            const docResult = result.workflow;
+            console.log('[Workflow Drop] frontmatter.steps:', docResult?.frontmatter?.steps);
             fullWorkflow = {
               ...fullWorkflow,
-              ...docResult.metadata,
               content: docResult.content || '',
-              raw_content: docResult.raw || '',
+              raw_content: docResult.raw_content || '',
               frontmatter: docResult.frontmatter || {},
-              title: docResult.metadata?.name || docResult.frontmatter?.name || fullWorkflow.title,
-              description: docResult.metadata?.description || docResult.frontmatter?.description || fullWorkflow.description,
-              steps: docResult.frontmatter?.steps || []
+              title: docResult.name || docResult.frontmatter?.name || fullWorkflow.title,
+              description: docResult.description || docResult.frontmatter?.description || fullWorkflow.description,
+              steps: docResult.frontmatter?.steps || docResult.steps || []
             };
             console.log('[Workflow Drop] fullWorkflow.steps after fetch:', fullWorkflow.steps);
           }

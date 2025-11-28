@@ -9,9 +9,121 @@ import MarkdownEditor from '../components/MarkdownEditor'
 import InlineMarkdownEditor from '../components/InlineMarkdownEditor'
 import DocsPreview from '../components/hub/DocsPreview'
 import SupabaseUploadModal from '../components/docs/SupabaseUploadModal'
+import DeleteContentModal from '../components/docs/DeleteContentModal'
 import docsService from '../services/docs-service'
-import { fetchWorkflowById, fetchWorkflows } from '../services/template-service'
+import { fetchWorkflowById, fetchWorkflows, fetchSkills, fetchMcpServers, fetchSubagents, fetchSkillById, fetchMcpServerById, fetchSubagentById } from '../services/template-service'
 import { updateContent, parseFrontmatter as parseMarkdownFrontmatter, serializeMarkdown } from '../services/content-edit-service'
+import { storageService } from '../services/storage-service'
+
+// Helper function to build subdirectory structure from references
+// Maps file_path patterns to display names and icons
+const SUBDIR_CONFIG = {
+  'references': { displayName: 'Guides', icon: '📚' },
+  'references/examples': { displayName: 'Examples', icon: '💡' },
+  'references/format-standards': { displayName: 'Standards', icon: '📐' },
+  'references/process-patterns': { displayName: 'Patterns', icon: '🔄' },
+  'references/system-prompts': { displayName: 'Prompts', icon: '🤖' },
+  'references/prompts': { displayName: 'Prompts', icon: '🤖' },
+  'guides': { displayName: 'Guides', icon: '📚' },
+  'examples': { displayName: 'Examples', icon: '💡' },
+  'standards': { displayName: 'Standards', icon: '📐' },
+  'patterns': { displayName: 'Patterns', icon: '🔄' },
+  'prompts': { displayName: 'Prompts', icon: '🤖' }
+}
+
+// Infer subdirectory from filename when file_path is not available
+function inferSubdirFromFilename(filename) {
+  const name = filename.toLowerCase()
+
+  // Examples pattern
+  if (name.startsWith('example-') || name.includes('-example')) {
+    return 'references/examples'
+  }
+
+  // Standards/Format patterns
+  if (name.includes('-spec') || name.includes('-conventions') ||
+      name.includes('-guidelines') || name.includes('format-')) {
+    return 'references/format-standards'
+  }
+
+  // Patterns patterns
+  if (name.includes('best-practices') || name.includes('common-patterns') ||
+      name.includes('-process') || name.includes('patterns')) {
+    return 'references/process-patterns'
+  }
+
+  // Prompts patterns
+  if (name.includes('prompt') || name.includes('system-prompt')) {
+    return 'references/system-prompts'
+  }
+
+  // Default to guides
+  return 'references'
+}
+
+function buildSubdirStructureFromReferences(references) {
+  if (!references || references.length === 0) return []
+
+  // Group references by their directory path
+  const dirGroups = {}
+
+  references.forEach(ref => {
+    // Get directory from file_path or infer from filename
+    let dirPath = ''
+    if (ref.file_path) {
+      // file_path might be like "references/examples/example-deploy.md"
+      const parts = ref.file_path.split('/')
+      if (parts.length > 1) {
+        // Everything except the filename
+        dirPath = parts.slice(0, -1).join('/')
+      } else {
+        dirPath = inferSubdirFromFilename(ref.name || ref.file_path)
+      }
+    } else {
+      // Infer from filename when file_path is not available
+      dirPath = inferSubdirFromFilename(ref.name || '')
+    }
+
+    if (!dirGroups[dirPath]) {
+      dirGroups[dirPath] = []
+    }
+    dirGroups[dirPath].push({
+      name: ref.name,
+      displayName: ref.title || ref.name,
+      id: ref.id,
+      content: ref.content
+    })
+  })
+
+  // Convert to subdirectory structure array
+  const subdirs = Object.entries(dirGroups).map(([dirPath, files]) => {
+    const config = SUBDIR_CONFIG[dirPath] || { displayName: dirPath.split('/').pop() || 'Files', icon: '📄' }
+    return {
+      name: dirPath,
+      displayName: config.displayName,
+      icon: config.icon,
+      files: files
+    }
+  })
+
+  // Sort subdirectories in a consistent order
+  const orderMap = {
+    'references': 0,
+    'references/examples': 1,
+    'references/format-standards': 2,
+    'references/process-patterns': 3,
+    'references/system-prompts': 4,
+    'references/prompts': 4
+  }
+
+  subdirs.sort((a, b) => {
+    const orderA = orderMap[a.name] ?? 99
+    const orderB = orderMap[b.name] ?? 99
+    return orderA - orderB
+  })
+
+  return subdirs
+}
 
 // Styled Components
 const DocsContainer = styled.div`
@@ -20,6 +132,7 @@ const DocsContainer = styled.div`
   background: white;
   margin: 0;
   padding: 0;
+  overflow: visible;
 `
 
 const LeftSidebar = styled.div`
@@ -27,12 +140,14 @@ const LeftSidebar = styled.div`
   min-width: ${props => props.$visible ? '300px' : '0px'};
   border-right: none;
   background: #e8e8e8;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
   display: flex;
   flex-direction: column;
   transition: width 0.3s ease-in-out, min-width 0.3s ease-in-out;
   position: relative;
   border-radius: 0 12px 12px 0;
+  z-index: 100;
 `
 
 const NavigationHeader = styled.div`
@@ -442,6 +557,7 @@ const CopyButton = styled.button`
 const PostItTabContainer = styled.div`
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
   gap: 3px;
   margin-bottom: 0;
 `
@@ -887,6 +1003,7 @@ function Docs() {
   const [viewMode, setViewMode] = useState('markdown')
   const [rawFrontmatter, setRawFrontmatter] = useState('')
   const [metadata, setMetadata] = useState({})
+  const [currentReferences, setCurrentReferences] = useState([])
 
   // Per-item view state tracking (persists when switching between items)
   const [viewModeByItem, setViewModeByItem] = useState({})
@@ -909,6 +1026,9 @@ function Docs() {
 
   // Upload modal state
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
+
+  // Delete modal state
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
 
   // Track last selected file per subdirectory for persistence
   const [lastFileBySubdir, setLastFileBySubdir] = useState({})
@@ -953,138 +1073,6 @@ function Docs() {
 
   // Flag to track if content needs to be loaded on mount (from restored state)
   const [needsContentLoad, setNeedsContentLoad] = useState(!!savedState?.activeTab)
-
-  // Skill subdirectory structure (gitthub-workflow example)
-  const skillSubdirStructure = {
-    'gitthub-workflow': [
-      {
-        name: 'references',
-        displayName: 'Guides',
-        icon: '📚',
-        files: [
-          { name: 'deploy-guide.md', displayName: 'deploy-guide.md' },
-          { name: 'educate-guide.md', displayName: 'educate-guide.md' },
-          { name: 'navigate-guide.md', displayName: 'navigate-guide.md' },
-          { name: 'reference-handling.md', displayName: 'reference-handling.md' },
-          { name: 'skill-recommendations.md', displayName: 'skill-recommendations.md' }
-        ]
-      },
-      {
-        name: 'references/examples',
-        displayName: 'Examples',
-        icon: '💡',
-        files: [
-          { name: 'example-deploy.md', displayName: 'example-deploy.md' },
-          { name: 'example-educate.md', displayName: 'example-educate.md' },
-          { name: 'example-navigate.md', displayName: 'example-navigate.md' }
-        ]
-      },
-      {
-        name: 'references/format-standards',
-        displayName: 'Standards',
-        icon: '📐',
-        files: [
-          { name: 'workflow-format-spec.md', displayName: 'workflow-format-spec.md' },
-          { name: 'file-naming-conventions.md', displayName: 'file-naming-conventions.md' },
-          { name: 'quality-guidelines.md', displayName: 'quality-guidelines.md' }
-        ]
-      },
-      {
-        name: 'references/process-patterns',
-        displayName: 'Patterns',
-        icon: '🔄',
-        files: [
-          { name: 'best-practices.md', displayName: 'best-practices.md' },
-          { name: 'common-patterns.md', displayName: 'common-patterns.md' },
-          { name: 'workflow-generation-process.md', displayName: 'workflow-generation-process.md' }
-        ]
-      },
-      {
-        name: 'references/system-prompts',
-        displayName: 'Prompts',
-        icon: '🤖',
-        files: [
-          { name: 'deploy-guide.md', displayName: 'deploy-guide.md' },
-          { name: 'educate-guide.md', displayName: 'educate-guide.md' },
-          { name: 'navigate-guide.md', displayName: 'navigate-guide.md' }
-        ]
-      }
-    ]
-  }
-
-  // MCP subdirectory structure (generic template for MCP servers)
-  const mcpSubdirStructure = {
-    // Template structure for any MCP entry
-    default: [
-      {
-        name: 'references',
-        displayName: 'Guides',
-        icon: '📚',
-        files: []
-      },
-      {
-        name: 'references/examples',
-        displayName: 'Examples',
-        icon: '💡',
-        files: []
-      },
-      {
-        name: 'references/format-standards',
-        displayName: 'Standards',
-        icon: '📐',
-        files: []
-      },
-      {
-        name: 'references/process-patterns',
-        displayName: 'Patterns',
-        icon: '🔄',
-        files: []
-      },
-      {
-        name: 'references/prompts',
-        displayName: 'Prompts',
-        icon: '🤖',
-        files: []
-      }
-    ]
-  }
-
-  // Subagent subdirectory structure (generic template for subagents)
-  const subagentSubdirStructure = {
-    // Template structure for any subagent entry
-    default: [
-      {
-        name: 'references',
-        displayName: 'Guides',
-        icon: '📚',
-        files: []
-      },
-      {
-        name: 'references/examples',
-        displayName: 'Examples',
-        icon: '💡',
-        files: []
-      },
-      {
-        name: 'references/format-standards',
-        displayName: 'Standards',
-        icon: '📐',
-        files: []
-      },
-      {
-        name: 'references/process-patterns',
-        displayName: 'Patterns',
-        icon: '🔄',
-        files: []
-      },
-      {
-        name: 'references/prompts',
-        displayName: 'Prompts',
-        icon: '🤖',
-        files: []
-      }
-    ]
-  }
 
   // Keyboard shortcut handler for Command Palette (⌘K / Ctrl+K)
   useEffect(() => {
@@ -1143,7 +1131,7 @@ function Docs() {
         // For skills with subdirectories
         if (selectedSection === 'skills' && activeTab) {
           const currentSkillId = activeTab
-          const subdirs = skillSubdirStructure[currentSkillId]
+          const subdirs = buildSubdirStructureFromReferences(currentReferences)
 
           if (subdirs && subdirs.length > 0) {
             e.preventDefault()
@@ -1342,17 +1330,56 @@ function Docs() {
             }))
           : []
 
-        // Fetch other content types from docsService (static files)
-        const [skillsData, mcpData, subagentsData] = await Promise.all([
-          docsService.listSection('skills'),
-          docsService.listSection('mcp'),
-          docsService.listSection('subagents')
+        // Fetch other content types from Supabase (using template-service)
+        const [skillsResponse, mcpResponse, subagentsResponse] = await Promise.all([
+          fetchSkills(user?.id, { limit: 100 }),
+          fetchMcpServers(user?.id, { limit: 100 }),
+          fetchSubagents(user?.id, { limit: 100 })
         ])
 
+        // Transform skills to match expected format
+        const transformedSkills = skillsResponse.success
+          ? skillsResponse.skills.map(s => ({
+              id: s.id,  // UUID from Supabase
+              name: s.name,
+              description: s.description,
+              category: s.category,
+              tags: s.tags || [],
+              content: s.content,
+              frontmatter: s.frontmatter,
+            }))
+          : []
+
+        // Transform MCP servers to match expected format
+        const transformedMcp = mcpResponse.success
+          ? mcpResponse.mcp_servers.map(m => ({
+              id: m.id,  // UUID from Supabase
+              name: m.name,
+              description: m.description,
+              category: m.category,
+              tags: m.tags || [],
+              content: m.content,
+              frontmatter: m.frontmatter,
+            }))
+          : []
+
+        // Transform subagents to match expected format
+        const transformedSubagents = subagentsResponse.success
+          ? subagentsResponse.subagents.map(a => ({
+              id: a.id,  // UUID from Supabase
+              name: a.name,
+              description: a.description,
+              category: a.category,
+              tags: a.tags || [],
+              content: a.content,
+              frontmatter: a.frontmatter,
+            }))
+          : []
+
         setAvailableWorkflows(transformedWorkflows)
-        setAvailableSkills(skillsData.items || [])
-        setAvailableMcp(mcpData.items || [])
-        setAvailableSubagents(subagentsData.items || [])
+        setAvailableSkills(transformedSkills)
+        setAvailableMcp(transformedMcp)
+        setAvailableSubagents(transformedSubagents)
       } catch (err) {
         console.error('Error loading manifest files:', err)
         // Not critical - fallback to empty lists
@@ -1397,17 +1424,54 @@ function Docs() {
           rawFrontmatterText = workflow.raw_content
             ? workflow.raw_content.match(/^---\s*\n([\s\S]*?)\n---/)?.[1] || ''
             : ''
-        } else {
-          // Use docsService for other sections (skills, mcp, subagents)
-          docData = await docsService.getDoc(selectedSection, activeTab)
-          console.log('Fetched doc data:', docData)
+        } else if (selectedSection === 'skills') {
+          // Fetch skill from Supabase
+          const response = await fetchSkillById(activeTab)
+          if (!response.success || !response.skill) {
+            throw new Error('Failed to load skill')
+          }
 
-          // Extract content and frontmatter from response
-          content = docData.content || ''
-          metadataObj = docData.frontmatter || {}
-          rawFrontmatterText = docData.raw_content
-            ? docData.raw_content.match(/^---\s*\n([\s\S]*?)\n---/)?.[1] || ''
+          const skill = response.skill
+          content = skill.content || ''
+          metadataObj = skill.frontmatter || {}
+          rawFrontmatterText = skill.raw_content
+            ? skill.raw_content.match(/^---\s*\n([\s\S]*?)\n---/)?.[1] || ''
             : ''
+          // Store references for subdirectory tabs
+          setCurrentReferences(skill.references || [])
+          console.log('Fetched skill from Supabase:', skill.name, 'with', skill.references?.length || 0, 'references')
+        } else if (selectedSection === 'mcp') {
+          // Fetch MCP server from Supabase
+          const response = await fetchMcpServerById(activeTab)
+          if (!response.success || !response.mcp_server) {
+            throw new Error('Failed to load MCP server')
+          }
+
+          const mcpServer = response.mcp_server
+          content = mcpServer.content || ''
+          metadataObj = mcpServer.frontmatter || {}
+          rawFrontmatterText = mcpServer.raw_content
+            ? mcpServer.raw_content.match(/^---\s*\n([\s\S]*?)\n---/)?.[1] || ''
+            : ''
+          // Store references for subdirectory tabs
+          setCurrentReferences(mcpServer.references || [])
+          console.log('Fetched MCP server from Supabase:', mcpServer.name, 'with', mcpServer.references?.length || 0, 'references')
+        } else if (selectedSection === 'subagents') {
+          // Fetch subagent from Supabase
+          const response = await fetchSubagentById(activeTab)
+          if (!response.success || !response.subagent) {
+            throw new Error('Failed to load subagent')
+          }
+
+          const subagent = response.subagent
+          content = subagent.content || ''
+          metadataObj = subagent.frontmatter || {}
+          rawFrontmatterText = subagent.raw_content
+            ? subagent.raw_content.match(/^---\s*\n([\s\S]*?)\n---/)?.[1] || ''
+            : ''
+          // Store references for subdirectory tabs
+          setCurrentReferences(subagent.references || [])
+          console.log('Fetched subagent from Supabase:', subagent.name, 'with', subagent.references?.length || 0, 'references')
         }
 
         console.log('Parsed content length:', content.length)
@@ -1468,12 +1532,23 @@ function Docs() {
     const loadSubdirFileAuto = async (subdirName, fileName) => {
       console.log('loadSubdirFileAuto called:', subdirName, fileName)
       try {
-        const filePath = `${subdirName}/${fileName}`
-        console.log('Fetching via docsService:', filePath)
-        const fileData = await docsService.getDocFile('skills', activeTab, filePath)
-        const content = fileData.content || ''
-        console.log('Content loaded, length:', content.length)
-        setSubdirContent(content)
+        // Find the file in currentReferences by matching file_path or name
+        const targetPath = `${subdirName}/${fileName}`
+        console.log('Looking for reference:', targetPath)
+        const ref = currentReferences.find(r =>
+          r.file_path === targetPath ||
+          r.name === fileName ||
+          (r.file_path && r.file_path.endsWith(`/${fileName}`))
+        )
+
+        if (ref && ref.content) {
+          console.log('Content loaded from reference, length:', ref.content.length)
+          setSubdirContent(ref.content)
+        } else {
+          console.warn('Reference not found or has no content:', targetPath)
+          setSubdirContent(`# ${fileName}\n\nContent not available.`)
+        }
+
         setSelectedFile(`${subdirName}/${fileName}`)
         // Save last selected file for this subdirectory
         setLastFileBySubdir(prev => ({
@@ -1488,7 +1563,7 @@ function Docs() {
 
     // Only process for skills with subdirectories
     if (selectedSection === 'skills' && activeTab) {
-      const subdirs = skillSubdirStructure[activeTab]
+      const subdirs = buildSubdirStructureFromReferences(currentReferences)
       console.log('Subdirs for', activeTab, ':', subdirs ? subdirs.length : 'none')
 
       if (subdirs && subdirs.length > 0) {
@@ -1520,7 +1595,7 @@ function Docs() {
     } else {
       console.log('Not a skill or no activeTab')
     }
-  }, [selectedSubdir, selectedSection, activeTab])
+  }, [selectedSubdir, selectedSection, activeTab, currentReferences, lastFileBySubdir])
 
   // Helper function to detect content type from metadata
   const detectContentType = (section, metadata) => {
@@ -1743,19 +1818,56 @@ function Docs() {
 
         setAvailableWorkflows(transformedWorkflows)
       } else {
-        // Other sections: use docsService
-        const sectionData = await docsService.listSection(section)
-
+        // Other sections: fetch from Supabase using template-service
         switch (section) {
-          case 'skills':
-            setAvailableSkills(sectionData.items || [])
+          case 'skills': {
+            const skillsResponse = await fetchSkills(user?.id, { limit: 100 })
+            const transformedSkills = skillsResponse.success
+              ? skillsResponse.skills.map(s => ({
+                  id: s.id,
+                  name: s.name,
+                  description: s.description,
+                  category: s.category,
+                  tags: s.tags || [],
+                  content: s.content,
+                  frontmatter: s.frontmatter,
+                }))
+              : []
+            setAvailableSkills(transformedSkills)
             break
-          case 'mcp':
-            setAvailableMcp(sectionData.items || [])
+          }
+          case 'mcp': {
+            const mcpResponse = await fetchMcpServers(user?.id, { limit: 100 })
+            const transformedMcp = mcpResponse.success
+              ? mcpResponse.mcp_servers.map(m => ({
+                  id: m.id,
+                  name: m.name,
+                  description: m.description,
+                  category: m.category,
+                  tags: m.tags || [],
+                  content: m.content,
+                  frontmatter: m.frontmatter,
+                }))
+              : []
+            setAvailableMcp(transformedMcp)
             break
-          case 'subagents':
-            setAvailableSubagents(sectionData.items || [])
+          }
+          case 'subagents': {
+            const subagentsResponse = await fetchSubagents(user?.id, { limit: 100 })
+            const transformedSubagents = subagentsResponse.success
+              ? subagentsResponse.subagents.map(a => ({
+                  id: a.id,
+                  name: a.name,
+                  description: a.description,
+                  category: a.category,
+                  tags: a.tags || [],
+                  content: a.content,
+                  frontmatter: a.frontmatter,
+                }))
+              : []
+            setAvailableSubagents(transformedSubagents)
             break
+          }
         }
       }
 
@@ -1763,6 +1875,97 @@ function Docs() {
       handleSelectEntry(section, docId)
     } catch (err) {
       console.error('Error refreshing after upload:', err)
+    }
+  }
+
+  // Handle delete completion - refresh the list and clear selection if deleted
+  const handleDeleteComplete = async (deletedIds) => {
+    console.log('Delete complete, removed IDs:', deletedIds)
+
+    try {
+      // Get the content type based on current section
+      const section = selectedSection === 'readme' ? 'workflows' : selectedSection
+
+      // Refresh the list
+      switch (section) {
+        case 'workflows': {
+          const workflowsResponse = await fetchWorkflows(user?.id, { limit: 100 })
+          const transformedWorkflows = workflowsResponse.success
+            ? workflowsResponse.workflows.map(w => ({
+                id: w.id,
+                name: w.name,
+                description: w.description,
+                category: w.category,
+                tags: w.tags || [],
+                difficulty: w.metadata?.difficulty || 'intermediate',
+                steps: w.steps || [],
+                frontmatter: w.frontmatter,
+                content: w.content,
+              }))
+            : []
+          setAvailableWorkflows(transformedWorkflows)
+          break
+        }
+        case 'skills': {
+          const skillsResponse = await fetchSkills(user?.id, { limit: 100 })
+          const transformedSkills = skillsResponse.success
+            ? skillsResponse.skills.map(s => ({
+                id: s.id,
+                name: s.name,
+                description: s.description,
+                category: s.category,
+                tags: s.tags || [],
+                content: s.content,
+                frontmatter: s.frontmatter,
+              }))
+            : []
+          setAvailableSkills(transformedSkills)
+          break
+        }
+        case 'mcp': {
+          const mcpResponse = await fetchMcpServers(user?.id, { limit: 100 })
+          const transformedMcp = mcpResponse.success
+            ? mcpResponse.mcp_servers.map(m => ({
+                id: m.id,
+                name: m.name,
+                description: m.description,
+                category: m.category,
+                tags: m.tags || [],
+                content: m.content,
+                frontmatter: m.frontmatter,
+              }))
+            : []
+          setAvailableMcp(transformedMcp)
+          break
+        }
+        case 'subagents': {
+          const subagentsResponse = await fetchSubagents(user?.id, { limit: 100 })
+          const transformedSubagents = subagentsResponse.success
+            ? subagentsResponse.subagents.map(a => ({
+                id: a.id,
+                name: a.name,
+                description: a.description,
+                category: a.category,
+                tags: a.tags || [],
+                content: a.content,
+                frontmatter: a.frontmatter,
+              }))
+            : []
+          setAvailableSubagents(transformedSubagents)
+          break
+        }
+      }
+
+      // If currently selected item was deleted, clear selection
+      if (activeTab && deletedIds.includes(activeTab)) {
+        setActiveTab(null)
+        setDocContent('')
+        setMetadata({})
+        setRawFrontmatter('')
+        setCurrentReferences([])
+      }
+    } catch (err) {
+      console.error('Error refreshing after delete:', err)
     }
   }
 
@@ -1789,19 +1992,73 @@ function Docs() {
       setMcpOverview(overviews.mcp || '')
       setSubagentsOverview(overviews.subagents || '')
 
-      // Reload manifests via docsService (with static fallback built-in)
-      const [workflowsData, skillsData, mcpData, subagentsData] = await Promise.all([
-        docsService.listSection('workflows'),
-        docsService.listSection('skills'),
-        docsService.listSection('mcp'),
-        docsService.listSection('subagents')
+      // Reload all content from Supabase
+      const [workflowsResponse, skillsResponse, mcpResponse, subagentsResponse] = await Promise.all([
+        fetchWorkflows(user?.id, { limit: 100 }),
+        fetchSkills(user?.id, { limit: 100 }),
+        fetchMcpServers(user?.id, { limit: 100 }),
+        fetchSubagents(user?.id, { limit: 100 })
       ])
 
-      setAvailableWorkflows(workflowsData.items || [])
-      setAvailableSkills(skillsData.items || [])
-      setAvailableMcp(mcpData.items || [])
-      setAvailableSubagents(subagentsData.items || [])
-      console.log(`✓ Loaded ${workflowsData.count} workflows, ${skillsData.count} skills, ${mcpData.count} mcp, ${subagentsData.count} subagents`)
+      // Transform workflows
+      const transformedWorkflows = workflowsResponse.success
+        ? workflowsResponse.workflows.map(w => ({
+            id: w.id,
+            name: w.name,
+            description: w.description,
+            category: w.category,
+            tags: w.tags || [],
+            difficulty: w.metadata?.difficulty || 'intermediate',
+            steps: w.steps || [],
+            frontmatter: w.frontmatter,
+            content: w.content,
+          }))
+        : []
+
+      // Transform skills
+      const transformedSkills = skillsResponse.success
+        ? skillsResponse.skills.map(s => ({
+            id: s.id,
+            name: s.name,
+            description: s.description,
+            category: s.category,
+            tags: s.tags || [],
+            content: s.content,
+            frontmatter: s.frontmatter,
+          }))
+        : []
+
+      // Transform MCP servers
+      const transformedMcp = mcpResponse.success
+        ? mcpResponse.mcp_servers.map(m => ({
+            id: m.id,
+            name: m.name,
+            description: m.description,
+            category: m.category,
+            tags: m.tags || [],
+            content: m.content,
+            frontmatter: m.frontmatter,
+          }))
+        : []
+
+      // Transform subagents
+      const transformedSubagents = subagentsResponse.success
+        ? subagentsResponse.subagents.map(a => ({
+            id: a.id,
+            name: a.name,
+            description: a.description,
+            category: a.category,
+            tags: a.tags || [],
+            content: a.content,
+            frontmatter: a.frontmatter,
+          }))
+        : []
+
+      setAvailableWorkflows(transformedWorkflows)
+      setAvailableSkills(transformedSkills)
+      setAvailableMcp(transformedMcp)
+      setAvailableSubagents(transformedSubagents)
+      console.log(`✓ Loaded ${transformedWorkflows.length} workflows, ${transformedSkills.length} skills, ${transformedMcp.length} mcp, ${transformedSubagents.length} subagents`)
 
       // Clear selected entry lists to start fresh
       setWorkflowEntries([])
@@ -1844,6 +2101,55 @@ function Docs() {
       setEditingFilePath(null) // null means main document
     }
     setIsEditMode(true)
+  }
+
+  // Download state
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState(null)
+
+  // Clear download error when switching entities
+  useEffect(() => {
+    setDownloadError(null)
+  }, [activeTab, selectedSection])
+
+  // Download file from storage
+  const handleDownload = async () => {
+    if (!activeTab || !selectedSection || selectedSection === 'readme') {
+      return
+    }
+
+    setIsDownloading(true)
+    setDownloadError(null)
+
+    try {
+      // First check if files exist
+      const { data: files, error: listError } = await storageService.listFiles(selectedSection, activeTab)
+
+      if (listError) {
+        console.error('List files error:', listError)
+        setDownloadError('Storage bucket not configured')
+        setIsDownloading(false)
+        return
+      }
+
+      if (!files || files.length === 0) {
+        setDownloadError('No file available for download')
+        setIsDownloading(false)
+        return
+      }
+
+      // Trigger the download
+      const { error } = await storageService.triggerDownload(selectedSection, activeTab)
+      if (error) {
+        console.warn('Download failed:', error)
+        setDownloadError('Download failed')
+      }
+    } catch (err) {
+      console.error('Download error:', err)
+      setDownloadError('Download failed')
+    } finally {
+      setIsDownloading(false)
+    }
   }
 
   // Cancel edit and discard changes
@@ -2282,18 +2588,29 @@ function Docs() {
             : parseFrontmatterForTable(rawFrontmatter))
         : []
 
-      // Get subdirectory structure for current skill
+      // Get subdirectory structure from current references (loaded from Supabase)
       const currentSubdirs = selectedSection === 'skills' && activeTab
-        ? skillSubdirStructure[activeTab] || []
+        ? buildSubdirStructureFromReferences(currentReferences)
         : []
 
-      // Load file from subdirectory
+      // Load file from subdirectory (from Supabase references)
       const loadSubdirFile = async (subdirName, fileName) => {
         try {
-          const filePath = `${subdirName}/${fileName}`
-          const fileData = await docsService.getDocFile('skills', activeTab, filePath)
-          const content = fileData.content || ''
-          setSubdirContent(content)
+          // Find the file in currentReferences by matching file_path or name
+          const targetPath = `${subdirName}/${fileName}`
+          const ref = currentReferences.find(r =>
+            r.file_path === targetPath ||
+            r.name === fileName ||
+            (r.file_path && r.file_path.endsWith(`/${fileName}`))
+          )
+
+          if (ref && ref.content) {
+            setSubdirContent(ref.content)
+          } else {
+            console.warn('Reference not found or has no content:', targetPath)
+            setSubdirContent(`# ${fileName}\n\nContent not available.`)
+          }
+
           setSelectedFile(`${subdirName}/${fileName}`)
           // Save last selected file for this subdirectory
           setLastFileBySubdir(prev => ({
@@ -2448,9 +2765,9 @@ function Docs() {
               </PostItTabContainer>
             )}
 
-            {/* Document header with edit button - positioned after tabs, only for logged-in users */}
-            {user && (
-              <DocumentHeader>
+            {/* Document header with edit button only */}
+            <DocumentHeader>
+              {user && (
                 <EditButton
                   $active={false}
                   onClick={handleEnterEditMode}
@@ -2458,8 +2775,8 @@ function Docs() {
                 >
                   ✎ Edit
                 </EditButton>
-              </DocumentHeader>
-            )}
+              )}
+            </DocumentHeader>
 
             {/* Content display */}
             {selectedFile ? (
@@ -2611,6 +2928,12 @@ function Docs() {
             availableMcp={availableMcp}
             availableSubagents={availableSubagents}
             onItemSelectFromList={handleItemSelectFromList}
+            user={user}
+            onUploadClick={() => setIsUploadModalOpen(true)}
+            onDeleteClick={() => setIsDeleteModalOpen(true)}
+            onDownloadClick={handleDownload}
+            isDownloading={isDownloading}
+            downloadError={downloadError}
           />
         </FileTreeScrollableArea>
         {isNavVisible && !(['workflows', 'skills', 'mcp', 'subagents'].includes(selectedSection) && !activeTab) && (
@@ -2640,6 +2963,25 @@ function Docs() {
         onClose={() => setIsUploadModalOpen(false)}
         activeSection={selectedSection === 'readme' ? 'workflows' : selectedSection}
         onUploadComplete={handleUploadComplete}
+      />
+
+      {/* Delete Content Modal */}
+      <DeleteContentModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        contentType={
+          selectedSection === 'skills' ? 'skill' :
+          selectedSection === 'mcp' ? 'mcp_server' :
+          selectedSection === 'subagents' ? 'subagent' :
+          'workflow'
+        }
+        items={
+          selectedSection === 'skills' ? availableSkills :
+          selectedSection === 'mcp' ? availableMcp :
+          selectedSection === 'subagents' ? availableSubagents :
+          availableWorkflows
+        }
+        onDeleteComplete={handleDeleteComplete}
       />
     </DocsContainer>
   )
