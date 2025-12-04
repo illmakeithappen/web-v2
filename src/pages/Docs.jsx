@@ -7,6 +7,7 @@ import CommandPalette from '../components/hub/CommandPalette'
 import MarkdownRenderer from '../components/MarkdownRenderer'
 import MarkdownEditor from '../components/MarkdownEditor'
 import InlineMarkdownEditor from '../components/InlineMarkdownEditor'
+import SeamlessMarkdownEditor from '../components/SeamlessMarkdownEditor'
 import DocsPreview from '../components/hub/DocsPreview'
 import SupabaseUploadModal from '../components/docs/SupabaseUploadModal'
 import DeleteContentModal from '../components/docs/DeleteContentModal'
@@ -14,6 +15,7 @@ import docsService from '../services/docs-service'
 import { fetchWorkflowById, fetchWorkflows, fetchSkills, fetchMcpServers, fetchSubagents, fetchSkillById, fetchMcpServerById, fetchSubagentById } from '../services/template-service'
 import { updateContent, parseFrontmatter as parseMarkdownFrontmatter, serializeMarkdown } from '../services/content-edit-service'
 import { storageService } from '../services/storage-service'
+import JSZip from 'jszip'
 
 // Helper function to build subdirectory structure from references
 // Maps file_path patterns to display names and icons
@@ -627,6 +629,167 @@ const ContentWithTabs = styled.div`
   /* No special positioning needed for horizontal tabs */
 `
 
+// Workflow References Panel styled components
+const ReferencesPanel = styled.div`
+  background: #fafafa;
+  border: 1px solid #e1e4e8;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 1rem;
+`
+
+const ReferencesList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+`
+
+const ReferenceItem = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: white;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+
+  &:hover {
+    border-color: #0969da;
+    box-shadow: 0 2px 8px rgba(9, 105, 218, 0.1);
+  }
+`
+
+const ReferenceInfo = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+`
+
+const ReferenceIcon = styled.span`
+  font-size: 1.25rem;
+`
+
+const ReferenceName = styled.span`
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #24292f;
+`
+
+const ReferenceActions = styled.div`
+  display: flex;
+  gap: 0.5rem;
+`
+
+const ReferenceActionButton = styled.button`
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: white;
+  font-size: 0.8rem;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+  }
+`
+
+const UploadReferenceButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 1rem;
+  margin-top: 1rem;
+  border: 2px dashed #d1d5db;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 0.9rem;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    border-color: #0969da;
+    color: #0969da;
+    background: rgba(9, 105, 218, 0.05);
+  }
+`
+
+const EmptyReferencesState = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem;
+  color: #6b7280;
+  text-align: center;
+`
+
+const ReferencePreviewModal = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+`
+
+const ReferencePreviewContent = styled.div`
+  background: white;
+  border-radius: 8px;
+  width: 80%;
+  max-width: 800px;
+  max-height: 80vh;
+  overflow: auto;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+`
+
+const ReferencePreviewHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e1e4e8;
+  background: #f6f8fa;
+`
+
+const ReferencePreviewTitle = styled.h3`
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #24292f;
+`
+
+const ReferencePreviewClose = styled.button`
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: white;
+  font-size: 0.8rem;
+  color: #374151;
+  cursor: pointer;
+
+  &:hover {
+    background: #f3f4f6;
+  }
+`
+
+const ReferencePreviewBody = styled.div`
+  padding: 1.5rem;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  line-height: 1.6;
+`
+
 // Empty state styled components for main content
 const MainEmptyState = styled.div`
   display: flex;
@@ -1046,6 +1209,11 @@ function Docs() {
   const [originalParagraphContent, setOriginalParagraphContent] = useState('')
   const [paragraphPosition, setParagraphPosition] = useState({ top: 0, left: 0, width: 0, height: 0 })
 
+  // Workflow-specific tab state (Main / References)
+  const [workflowTab, setWorkflowTab] = useState('main') // 'main' | 'references'
+  const [workflowReferences, setWorkflowReferences] = useState([]) // Files from S3
+  const [previewingReference, setPreviewingReference] = useState(null) // Currently previewing reference file
+
   // Refs for scroll sync between rendered view and edit textarea
   const mainContentRef = useRef(null)
   const textareaRef = useRef(null)
@@ -1376,10 +1544,21 @@ function Docs() {
             }))
           : []
 
-        setAvailableWorkflows(transformedWorkflows)
-        setAvailableSkills(transformedSkills)
-        setAvailableMcp(transformedMcp)
-        setAvailableSubagents(transformedSubagents)
+        // Filter content for unauthenticated users
+        // - Workflows: empty for unauthenticated
+        // - Skills: only show "gitthub-workflow" for unauthenticated
+        // - MCP/Subagents: empty for unauthenticated
+        const filteredWorkflows = user ? transformedWorkflows : []
+        const filteredSkills = user
+          ? transformedSkills
+          : transformedSkills.filter(s => s.name === 'gitthub-workflow')
+        const filteredMcp = user ? transformedMcp : []
+        const filteredSubagents = user ? transformedSubagents : []
+
+        setAvailableWorkflows(filteredWorkflows)
+        setAvailableSkills(filteredSkills)
+        setAvailableMcp(filteredMcp)
+        setAvailableSubagents(filteredSubagents)
       } catch (err) {
         console.error('Error loading manifest files:', err)
         // Not critical - fallback to empty lists
@@ -1424,6 +1603,10 @@ function Docs() {
           rawFrontmatterText = workflow.raw_content
             ? workflow.raw_content.match(/^---\s*\n([\s\S]*?)\n---/)?.[1] || ''
             : ''
+          // Fetch workflow reference files (from metadata or S3)
+          fetchWorkflowReferences(activeTab, workflow.frontmatter?.references)
+          // Reset to Main tab when selecting a new workflow
+          setWorkflowTab('main')
         } else if (selectedSection === 'skills') {
           // Fetch skill from Supabase
           const response = await fetchSkillById(activeTab)
@@ -2112,7 +2295,7 @@ function Docs() {
     setDownloadError(null)
   }, [activeTab, selectedSection])
 
-  // Download file from storage
+  // Download file from storage - bundles main content + references into ZIP
   const handleDownload = async () => {
     if (!activeTab || !selectedSection || selectedSection === 'readme') {
       return
@@ -2122,33 +2305,245 @@ function Docs() {
     setDownloadError(null)
 
     try {
-      // First check if files exist
-      const { data: files, error: listError } = await storageService.listFiles(selectedSection, activeTab)
-
-      if (listError) {
-        console.error('List files error:', listError)
-        setDownloadError('Storage bucket not configured')
+      // 1. Get main content from database (includes edits)
+      const mainContent = selectedEntryContent
+      if (!mainContent) {
+        setDownloadError('No content available for download')
         setIsDownloading(false)
         return
       }
 
-      if (!files || files.length === 0) {
-        setDownloadError('No file available for download')
-        setIsDownloading(false)
-        return
+      // Reconstruct full document with frontmatter
+      const fullDocument = rawFrontmatter
+        ? `---\n${rawFrontmatter}\n---\n\n${mainContent}`
+        : mainContent
+
+      // 2. Create ZIP file
+      const zip = new JSZip()
+
+      // Add main document as "workflow.md" (clean name, not UUID)
+      zip.file('workflow.md', fullDocument)
+
+      // 3. For workflows, add FILTERED reference files from S3
+      // Use dynamic path (may be nested for legacy uploads)
+      if (selectedSection === 'workflows' && workflowReferences.length > 0) {
+        const referencesFolder = zip.folder('references')
+
+        for (const ref of workflowReferences) {
+          // Double-filter: skip ZIP files and UUID-named files
+          const name = ref.name?.toLowerCase() || ''
+          if (name.endsWith('.zip')) continue
+          if (/^[a-f0-9]{8}-[a-f0-9]{4}/.test(name)) continue
+
+          try {
+            // Use fullPath from metadata if available, otherwise construct standard path
+            let filePath = ref.fullPath || `workflows/${activeTab}/references/${ref.name}`
+            // Handle vault-web bucket prefix
+            if (filePath.startsWith('vault-web/')) {
+              filePath = filePath.replace('vault-web/', '')
+            }
+            const { data, error } = await storageService.downloadFile(filePath)
+            if (!error && data) {
+              referencesFolder.file(ref.name, data)
+            } else {
+              console.warn(`Could not include reference file: ${ref.name}`)
+            }
+          } catch (refErr) {
+            console.warn(`Error downloading reference ${ref.name}:`, refErr)
+          }
+        }
       }
 
-      // Trigger the download
-      const { error } = await storageService.triggerDownload(selectedSection, activeTab)
-      if (error) {
-        console.warn('Download failed:', error)
-        setDownloadError('Download failed')
+      // 4. For skills with subdocuments (references), include them
+      if (selectedSection === 'skills' && currentReferences && currentReferences.length > 0) {
+        const referencesFolder = zip.folder('references')
+        for (const ref of currentReferences) {
+          if (ref.raw_content) {
+            const refFileName = ref.file_path
+              ? ref.file_path.split('/').pop()
+              : `${ref.name || ref.title || 'reference'}.md`
+            referencesFolder.file(refFileName, ref.raw_content)
+          }
+        }
       }
+
+      // 5. Generate ZIP with clean name: {id}_{date}.zip
+      const today = new Date().toISOString().split('T')[0].replace(/-/g, '')
+      const zipFileName = `${activeTab}_${today}.zip`
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' })
+      const url = URL.createObjectURL(zipBlob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = zipFileName
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
     } catch (err) {
       console.error('Download error:', err)
       setDownloadError('Download failed')
     } finally {
       setIsDownloading(false)
+    }
+  }
+
+  // Fetch workflow references from metadata (frontmatter.references)
+  // The metadata contains full paths to files in storage
+  const fetchWorkflowReferences = async (workflowId, metadataReferences = null) => {
+    console.log('fetchWorkflowReferences:', workflowId, 'metadata:', metadataReferences)
+
+    // Use references from frontmatter metadata
+    if (metadataReferences && Array.isArray(metadataReferences) && metadataReferences.length > 0) {
+      // Convert to reference objects with filename and full path
+      const refObjects = metadataReferences.map(ref => {
+        // Handle both full paths and plain filenames
+        const fullPath = typeof ref === 'string' ? ref : ref.path
+        const fileName = fullPath.split('/').pop()
+        return {
+          name: fileName,
+          fullPath: fullPath  // Keep full path for download/preview
+        }
+      }).filter(ref => {
+        // Filter out zip files and UUID-named items
+        const name = ref.name?.toLowerCase() || ''
+        if (!name) return false
+        if (name.endsWith('.zip')) return false
+        if (/^[a-f0-9]{8}-[a-f0-9]{4}/.test(name)) return false
+        return true
+      })
+
+      console.log('Workflow references from metadata:', refObjects)
+      setWorkflowReferences(refObjects)
+      return
+    }
+
+    // Fallback: try to list from S3 at standard path
+    try {
+      const { data: files, error } = await storageService.listFilesInSubfolder(
+        'workflows',
+        workflowId,
+        'references'
+      )
+
+      if (!error && files && files.length > 0) {
+        const validReferences = files.filter(file => {
+          const name = file.name?.toLowerCase() || ''
+          if (!name) return false
+          if (name.endsWith('.zip')) return false
+          if (name.startsWith('.')) return false
+          if (/^[a-f0-9]{8}-[a-f0-9]{4}/.test(name)) return false
+          return true
+        })
+        console.log('Workflow references from S3:', validReferences)
+        setWorkflowReferences(validReferences)
+        return
+      }
+    } catch (err) {
+      console.warn('S3 fallback failed:', err)
+    }
+
+    setWorkflowReferences([])
+  }
+
+  // Get file path - use fullPath from metadata if available, otherwise construct standard path
+  const getReferencePath = (file) => {
+    if (file.fullPath) return file.fullPath
+    return `workflows/${activeTab}/references/${file.name}`
+  }
+
+  // Get public URL for a reference file (for preview)
+  const getReferencePublicUrl = (file) => {
+    const path = getReferencePath(file)
+    // Determine bucket from path - if starts with 'vault-web/', use that bucket
+    if (path.startsWith('vault-web/')) {
+      const pathWithoutBucket = path.replace('vault-web/', '')
+      return storageService.getPublicUrl(pathWithoutBucket)
+    }
+    return storageService.getPublicUrl(path)
+  }
+
+  // Preview a reference file (images and PDFs)
+  const handlePreviewReference = (file) => {
+    const ext = file.name.split('.').pop().toLowerCase()
+    const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)
+    const isPdf = ext === 'pdf'
+
+    if (isImage || isPdf) {
+      const publicUrl = getReferencePublicUrl(file)
+      setPreviewingReference({ name: file.name, url: publicUrl, type: isImage ? 'image' : 'pdf' })
+    } else {
+      // For other files, just trigger download
+      handleDownloadReference(file)
+    }
+  }
+
+  // Download a single reference file
+  const handleDownloadReference = async (file) => {
+    try {
+      const filePath = getReferencePath(file)
+      // Handle vault-web bucket path
+      let downloadPath = filePath
+      if (filePath.startsWith('vault-web/')) {
+        downloadPath = filePath.replace('vault-web/', '')
+      }
+      const { data, error } = await storageService.downloadFile(downloadPath)
+      if (error) {
+        console.error('Error downloading file:', error)
+        return
+      }
+      // Create download link
+      const url = URL.createObjectURL(data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = file.name
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Error downloading file:', err)
+    }
+  }
+
+  // Delete a reference file
+  const handleDeleteReference = async (file) => {
+    if (!confirm(`Are you sure you want to delete "${file.name}"?`)) {
+      return
+    }
+    try {
+      const filePath = getReferencePath(file)
+      let deletePath = filePath
+      if (filePath.startsWith('vault-web/')) {
+        deletePath = filePath.replace('vault-web/', '')
+      }
+      const { error } = await storageService.deleteFile(deletePath)
+      if (error) {
+        console.error('Error deleting file:', error)
+        return
+      }
+      // Refresh the references list
+      await fetchWorkflowReferences(activeTab, metadata?.references)
+    } catch (err) {
+      console.error('Error deleting file:', err)
+    }
+  }
+
+  // Handle upload of reference file
+  const handleUploadReference = async (file) => {
+    try {
+      // Upload to S3: workflows/{workflowId}/references/{filename}
+      const { error } = await storageService.uploadFile('workflows', `${activeTab}/references`, file)
+      if (error) {
+        console.error('Error uploading file:', error)
+        return
+      }
+      // Refresh the references list
+      await fetchWorkflowReferences(activeTab, metadata?.references)
+      setIsUploadModalOpen(false)
+    } catch (err) {
+      console.error('Error uploading file:', err)
     }
   }
 
@@ -2199,11 +2594,13 @@ function Docs() {
   }, [isEditMode])
 
   // Save document
-  const handleSaveDocument = async () => {
+  const handleSaveDocument = async (newContent) => {
+    // Use newContent if provided (from SeamlessMarkdownEditor), otherwise fall back to editContent state
+    const contentToSave = newContent || editContent
     setIsSaving(true)
     try {
       // Parse the edited content to extract frontmatter and content
-      const { frontmatter: parsedFrontmatter, content: parsedContent } = parseMarkdownFrontmatter(editContent)
+      const { frontmatter: parsedFrontmatter, content: parsedContent } = parseMarkdownFrontmatter(contentToSave)
 
       // Determine content type for updateContent service
       const contentType = selectedSection === 'workflows' ? 'workflow'
@@ -2221,7 +2618,7 @@ function Docs() {
         contentType,
         activeTab,  // ID of the workflow/skill/mcp/subagent
         parsedContent,
-        editContent,  // raw_content with frontmatter
+        contentToSave,  // raw_content with frontmatter
         parsedFrontmatter
       )
 
@@ -2232,15 +2629,15 @@ function Docs() {
       // Update state based on what was edited
       if (editingFilePath) {
         // Saved a subdirectory file (references)
-        setSubdirContent(editContent)
+        setSubdirContent(contentToSave)
       } else {
         // Saved main document - parse frontmatter
-        const { metadata, content, rawFrontmatter: newRawFrontmatter } = parseFrontmatter(editContent)
+        const { metadata, content, rawFrontmatter: newRawFrontmatter } = parseFrontmatter(contentToSave)
         setSelectedEntryContent(content)
         setRawFrontmatter(newRawFrontmatter)
       }
 
-      setOriginalContent(editContent)
+      setOriginalContent(contentToSave)
 
       // Exit edit mode
       setIsEditMode(false)
@@ -2441,7 +2838,7 @@ function Docs() {
         <ContentWrapper>
           <ContentSection $visible={activeTab === 'welcome'}>
             {activeTab === 'welcome' && readmeMain && (
-              <MarkdownRenderer content={readmeMain.replace(/## Getting started:?[\s\S]*?(?=\n## |$)/i, '')} />
+              <MarkdownRenderer content={readmeMain} />
             )}
           </ContentSection>
 
@@ -2654,22 +3051,9 @@ function Docs() {
 
       return (
         <ContentWrapper>
-          {/* Edit mode view - textarea replaces rendered content in-place */}
+          {/* Edit mode view - SeamlessMarkdownEditor for in-place editing */}
           {isEditMode ? (
             <>
-              {/* Document header with cancel button in edit mode */}
-              <DocumentHeader>
-                {hasUnsavedChanges && (
-                  <UnsavedIndicator>Unsaved changes</UnsavedIndicator>
-                )}
-                <EditButton
-                  $active={true}
-                  onClick={handleCancelEdit}
-                  disabled={isSaving}
-                >
-                  ✕ Cancel
-                </EditButton>
-              </DocumentHeader>
               <MarkdownEditor
                 initialValue={editContent}
                 onChange={setEditContent}
@@ -2678,6 +3062,9 @@ function Docs() {
                 placeholder="Enter document content..."
               />
               <EditActions>
+                {hasUnsavedChanges && (
+                  <UnsavedIndicator>Unsaved changes</UnsavedIndicator>
+                )}
                 <CancelButton onClick={handleCancelEdit} disabled={isSaving}>
                   Cancel
                 </CancelButton>
@@ -2747,8 +3134,26 @@ function Docs() {
               </FileListDropdown>
             )}
 
-            {/* View toggle only for non-skill content (workflows, tools) */}
-            {!hasTabs && !selectedFile && (
+            {/* Workflow tabs: Main / References */}
+            {selectedSection === 'workflows' && !selectedFile && (
+              <PostItTabContainer>
+                <PostItTab
+                  $active={workflowTab === 'main'}
+                  onClick={() => setWorkflowTab('main')}
+                >
+                  Main
+                </PostItTab>
+                <PostItTab
+                  $active={workflowTab === 'references'}
+                  onClick={() => setWorkflowTab('references')}
+                >
+                  References
+                </PostItTab>
+              </PostItTabContainer>
+            )}
+
+            {/* View toggle for workflow Main tab and other non-skill content */}
+            {!hasTabs && !selectedFile && (selectedSection !== 'workflows' || workflowTab === 'main') && (
               <PostItTabContainer>
                 <PostItTab
                   $active={viewMode === 'markdown'}
@@ -2785,6 +3190,42 @@ function Docs() {
                 content={subdirContent}
                 onParagraphDoubleClick={handleParagraphDoubleClick}
               />
+            ) : selectedSection === 'workflows' && workflowTab === 'references' ? (
+              // Show workflow references panel
+              <ReferencesPanel>
+                {workflowReferences.length > 0 ? (
+                  <ReferencesList>
+                    {workflowReferences.map((file) => (
+                      <ReferenceItem key={file.name}>
+                        <ReferenceInfo>
+                          <ReferenceIcon>📄</ReferenceIcon>
+                          <ReferenceName>{file.name}</ReferenceName>
+                        </ReferenceInfo>
+                        <ReferenceActions>
+                          <ReferenceActionButton onClick={() => handlePreviewReference(file)}>
+                            Preview
+                          </ReferenceActionButton>
+                          <ReferenceActionButton onClick={() => handleDownloadReference(file)}>
+                            ⬇️
+                          </ReferenceActionButton>
+                          <ReferenceActionButton onClick={() => handleDeleteReference(file)}>
+                            🗑️
+                          </ReferenceActionButton>
+                        </ReferenceActions>
+                      </ReferenceItem>
+                    ))}
+                  </ReferencesList>
+                ) : (
+                  <EmptyReferencesState>
+                    <span style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📁</span>
+                    <p>No reference files yet</p>
+                    <p style={{ fontSize: '0.8rem' }}>Upload files to attach to this workflow</p>
+                  </EmptyReferencesState>
+                )}
+                <UploadReferenceButton onClick={() => setIsUploadModalOpen(true)}>
+                  + Upload Reference
+                </UploadReferenceButton>
+              </ReferencesPanel>
             ) : hasTabs ? (
               // Skills with tabs: show based on mainViewMode
               mainViewMode === 'skill.md' ? (
@@ -2983,6 +3424,37 @@ function Docs() {
         }
         onDeleteComplete={handleDeleteComplete}
       />
+
+      {/* Reference Preview Modal (Images + PDFs) */}
+      {previewingReference && (
+        <ReferencePreviewModal onClick={() => setPreviewingReference(null)}>
+          <ReferencePreviewContent onClick={(e) => e.stopPropagation()}>
+            <ReferencePreviewHeader>
+              <ReferencePreviewTitle>{previewingReference.name}</ReferencePreviewTitle>
+              <ReferencePreviewClose onClick={() => setPreviewingReference(null)}>
+                Close
+              </ReferencePreviewClose>
+            </ReferencePreviewHeader>
+            <ReferencePreviewBody>
+              {previewingReference.type === 'image' && (
+                <img
+                  src={previewingReference.url}
+                  alt={previewingReference.name}
+                  style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
+                />
+              )}
+              {previewingReference.type === 'pdf' && (
+                <iframe
+                  src={previewingReference.url}
+                  title={previewingReference.name}
+                  style={{ width: '100%', height: '70vh', border: 'none' }}
+                />
+              )}
+              {!previewingReference.type && previewingReference.content}
+            </ReferencePreviewBody>
+          </ReferencePreviewContent>
+        </ReferencePreviewModal>
+      )}
     </DocsContainer>
   )
 }
