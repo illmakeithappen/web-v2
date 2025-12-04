@@ -1,0 +1,76 @@
+<svg viewBox="0 0 820 175" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .card-title { font: 700 16px system-ui, -apple-system, sans-serif; fill: #161616; }
+      .card-desc { font: 400 12px system-ui, -apple-system, sans-serif; fill: #525252; }
+      .step-badge { font: 700 13px system-ui, -apple-system, sans-serif; fill: white; }
+    </style>
+    <marker id="arrowhead-flow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <polygon points="0 0, 10 4, 0 8" fill="#9ca3af"/>
+    </marker>
+    <marker id="arrowhead-return" markerWidth="10" markerHeight="8" refX="5" refY="0" orient="auto">
+      <polygon points="0 8, 5 0, 10 8" fill="#9ca3af"/>
+    </marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Card 1: Create -->
+  <g filter="url(#shadow)">
+    <rect x="10" y="15" width="175" height="115" fill="#f4f4f4" rx="8" stroke="#24a148" stroke-width="2"/>
+  </g>
+  <rect x="10" y="15" width="32" height="32" fill="#24a148" rx="4"/>
+  <text x="26" y="37" text-anchor="middle" class="step-badge">1</text>
+  <text x="50" y="36" class="card-title">Create</text>
+  <text x="22" y="62" class="card-desc">Use gitthub skill to</text>
+  <text x="22" y="80" class="card-desc">create or edit a</text>
+  <text x="22" y="98" class="card-desc">workflow with Claude</text>
+
+  <!-- Arrow 1→2 -->
+  <line x1="185" y1="72" x2="215" y2="72" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrowhead-flow)"/>
+
+  <!-- Card 2: Upload -->
+  <g filter="url(#shadow)">
+    <rect x="220" y="15" width="175" height="115" fill="#f4f4f4" rx="8" stroke="#0f62fe" stroke-width="2"/>
+  </g>
+  <rect x="220" y="15" width="32" height="32" fill="#0f62fe" rx="4"/>
+  <text x="236" y="37" text-anchor="middle" class="step-badge">2</text>
+  <text x="260" y="36" class="card-title">Upload</text>
+  <text x="232" y="62" class="card-desc">Go to Docs page,</text>
+  <text x="232" y="80" class="card-desc">upload and review</text>
+  <text x="232" y="98" class="card-desc">the workflow</text>
+
+  <!-- Arrow 2→3 -->
+  <line x1="395" y1="72" x2="425" y2="72" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrowhead-flow)"/>
+
+  <!-- Card 3: Execute -->
+  <g filter="url(#shadow)">
+    <rect x="430" y="15" width="175" height="115" fill="#f4f4f4" rx="8" stroke="#8a3ffc" stroke-width="2"/>
+  </g>
+  <rect x="430" y="15" width="32" height="32" fill="#8a3ffc" rx="4"/>
+  <text x="446" y="37" text-anchor="middle" class="step-badge">3</text>
+  <text x="470" y="36" class="card-title">Execute</text>
+  <text x="442" y="62" class="card-desc">Go to Hub page</text>
+  <text x="442" y="80" class="card-desc">and execute the</text>
+  <text x="442" y="98" class="card-desc">workflow</text>
+
+  <!-- Arrow 3→4 -->
+  <line x1="605" y1="72" x2="635" y2="72" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrowhead-flow)"/>
+
+  <!-- Card 4: Organize (was Document) - now purple -->
+  <g filter="url(#shadow)">
+    <rect x="640" y="15" width="175" height="115" fill="#f4f4f4" rx="8" stroke="#8a3ffc" stroke-width="2"/>
+  </g>
+  <rect x="640" y="15" width="32" height="32" fill="#8a3ffc" rx="4"/>
+  <text x="656" y="37" text-anchor="middle" class="step-badge">4</text>
+  <text x="680" y="36" class="card-title">Organize</text>
+  <text x="652" y="62" class="card-desc">Go to Projects and</text>
+  <text x="652" y="80" class="card-desc">organize your work,</text>
+  <text x="652" y="98" class="card-desc">inputs &amp; outputs</text>
+
+  <!-- Return arrow from Organize back to Create -->
+  <path d="M 727 130 L 727 155 Q 727 165 717 165 L 100 165 Q 90 165 90 155 L 90 135"
+        stroke="#9ca3af" stroke-width="2" fill="none"/>
+  <polygon points="85 140, 90 128, 95 140" fill="#9ca3af"/>
+</svg>

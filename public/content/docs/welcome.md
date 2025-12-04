@@ -1,177 +1,67 @@
-# Welcome to gitthub.org
+# Welcome to the gitthub documentation
 
-gitthub.org is a platform for organizing how you work with AI agents. It provides a structured approach to creating, storing, and sharing the instructions that guide AI assistants through complex tasks.
+gitthub.org is a platform for organizing how you work with AI agents. It provides a structured approach to creating, storing, and editing the instructions that guide AI assistants through complex tasks. Read through this executive summary before jumping right in via one of the three options in the getting started section on the left.
 
-The core problem gitthub solves: **AI agents are powerful but inconsistent**. Without organized instructions, you end up re-explaining the same tasks, getting variable results, and losing track of what worked. gitthub gives you a system to make AI collaboration repeatable and improvable.
+The core problem gitthub solves: **AI agents are powerful but its not obvious or trivial how to use them**. With organized instructions, you have an ex ante plan that modularizes the steps necessary to achive a goal.
 
----
+Assuming you have something in mind to create, it is always good advice to shortly step back and think about what this might depend on, and how to best go about it. gitthub offers a conceptualization of how to instruct an ai agent properly and gives you a system to make AI collaboration repeatable and improvable.
 
-## The Four Building Blocks
+For example, have a look at the diverse set of use cases anthropic offers on its page: https://claude.com/resources/use-cases.
 
-gitthub organizes AI instructions into four types. Each serves a different purpose in how you work with AI.
+With gitthub.org you have a format to save, edit and flexibly execute these use cases just via your browser using Claude. 
 
-### Workflows
+**At its core, gitthub is an instructions generator and display mode, that lets you follow along the jumps you can make using ai and harness them:**
 
-**Step-by-step guides for humans and AI to follow together.**
 
-Workflows are sequences of instructions that walk you through a process. Unlike automation tools (Zapier, n8n, Make), workflows don't run automatically - they guide you through decisions, let you adapt to context, and keep the human in control.
+<div style="border: 2px solid #8a3ffc; border-radius: 8px; overflow: hidden; max-width: 500px; margin: 16px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <div style="background: #8a3ffc; color: white; padding: 8px 12px; font-weight: 600; font-family: system-ui, sans-serif;">
+    view / execute mode
+  </div>
+  <img src="/images/docs-screenshot.png" alt="Execute view showing workflow instructions" style="width: 100%; display: block;" />
+</div>
 
-There are three types:
-- **Navigate** - Explore possibilities and compare approaches
-- **Educate** - Learn how something works through hands-on execution
-- **Deploy** - Get something built with clear, actionable steps
+The screenshot above shows the view/execute mode in the hub page. Its gitthubs cockpit for running manually through workflows for either creating something that needs many context inputs or for working out the best approach to reach something. 
 
-### Skills
 
-**Reusable capabilities that AI can invoke when needed.**
+You can use gitthub in many ways and for anything that can be digitally processed, but here is one core flow:
 
-Skills are concentrated instructions that give AI a specific ability. Once loaded, the AI can apply the skill whenever relevant - formatting code a certain way, analyzing data with a specific framework, or generating content in a particular style.
 
-Skills are the secret weapon: small documents that produce consistent, repeatable behavior across sessions.
+![Getting Started with gitthub - 4 step flow from Create to Document](/images/gitthub-getting-started-flow.svg)
 
-### MCP Servers
 
-**Bridges connecting AI to external tools and data.**
+1) create a new workflow using the gitthub skill in e.g. claude or claude code, it will guide you through a conversation that ends with a workflow you can review and then print as markdown.
+2) go to the gitthub.org docs page, select the workflow section and upload your workflow to the database. You can also have a further look at the summary of the steps and the source documents if you want to make small manual changes.
+3) now go to the hub page and display the individual instructions to follow along steer, optimize or add skills, mcps or subagents. Note: you can obviously also create a gitthub workflow for creating another skill, mcp server, or subagent specifically for your task.
+4) once your are happy with the execution or the state of a workflow you can organize it in a project.
 
-Model Context Protocol (MCP) servers let AI access databases, files, APIs, and other services. They're the connective tissue between AI and the real world - enabling database queries, file operations, GitHub interactions, and more.
+gitthub is organized into two main areas: **Docs** and **Hub**.
+<div style="display: flex; gap: 24px; margin: 24px 0;">
+  <div style="flex: 1;">
+    <img src="/images/gitthub-docs-structure.svg" alt="Docs page structure" style="width: 100%;" />
+  </div>
+  <div style="flex: 1;">
+    <img src="/images/gitthub-hub-structure.svg" alt="Hub page structure" style="width: 100%;" />
+  </div>
+</div>
 
-### Subagents
+### Docs
 
-**Specialized AI agents for delegating specific tasks.**
+This is where you currently are. Learn the concepts and patterns behind effective AI collaboration.
 
-Subagents are focused AI workers that handle particular domains. A research subagent finds information. A code review subagent checks your work. An orchestrator coordinates multiple subagents for complex tasks.
+Use the dropdown in the top left corner that currently says README to explore the four building blocks:
+- **Workflows** - Step-by-step guides for humans and AI to execute together
+- **Skills** - Reusable instructions that give AI consistent behavior
+- **MCP Servers** - Connections between AI and external tools
+- **Subagents** - Specialized AI workers for delegating tasks
 
----
+### Hub
 
-## When to Use What
+Your personal workspace for putting gitthub into practice.
 
-The boundaries between these building blocks can blur. Here's how to choose:
+- **Browse** the content library - discover workflows, skills, and MCP configurations
+- **Organize** your projects - group related workflows and skills together
+- **Build** your toolkit - save and customize the resources that work for you
 
-| Feature | Workflows | Skills | MCP Servers | Subagents |
-|---------|-----------|--------|-------------|-----------|
-| **Primary use** | Guide multi-step processes | Add repeatable capabilities | Connect to external tools | Delegate specialized tasks |
-| **Who executes** | Human + AI together | AI invokes when needed | AI calls via protocol | AI spawns for subtasks |
-| **Best for** | Deployment, learning, exploration | Formatting, analysis, generation | Database, files, APIs | Research, coding, review |
-| **Persistence** | Used once per process | Loaded into AI context | Always available when connected | Created and destroyed per task |
+Think of Docs as the manual, and Hub as your workbench.
 
-### Decision Guide
-
-**Use Workflows when you:**
-- Need guided steps through a complex process
-- Want to learn or compare different approaches
-- Are deploying something new and want structure
-
-**Use Skills when you:**
-- Want consistent, repeatable AI behavior
-- Need domain-specific capabilities (formatting, analysis patterns)
-- Want to encode expertise that persists across sessions
-
-**Use MCP Servers when:**
-- AI needs to read/write files or databases
-- You're connecting to external APIs (GitHub, Slack, etc.)
-- You need real-time data that AI can't access otherwise
-
-**Use Subagents when:**
-- Tasks are complex enough to benefit from decomposition
-- You need parallel processing of independent subtasks
-- Different parts require different expertise
-
----
-
-## How They Work Together
-
-Here's a concrete example: **Deploying a website with gitthub**
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  WORKFLOW: Deploy Website                                │
-│  (Navigate-style: explore hosting options)               │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  Step 1: Define requirements                             │
-│          └── SKILL: Requirements Gathering               │
-│              (structured questions, output format)       │
-│                                                          │
-│  Step 2: Generate configs                                │
-│          └── SKILL: Config Generator                     │
-│              (Vercel/Netlify/Render templates)           │
-│                                                          │
-│  Step 3: Set up repository                               │
-│          └── MCP: GitHub Server                          │
-│              (create repo, push code, configure)         │
-│                                                          │
-│  Step 4: Review and deploy                               │
-│          └── SUBAGENT: Code Review                       │
-│              (check security, suggest improvements)      │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
-```
-
-The workflow provides structure. Skills ensure consistent outputs. MCP connects to real services. Subagents handle specialized work.
-
----
-
-## Using the Platform
-
-### Browse
-
-Navigate using the tabs at the top:
-- **Workflows** - Step-by-step guides
-- **Skills** - Reusable AI capabilities
-- **MCP** - Server configurations
-- **Subagents** - Specialized agent prompts
-
-### Search
-
-Press `Cmd+K` (or `Ctrl+K`) to open the command palette. Search across all content instantly.
-
-### Edit
-
-- **Double-click** any paragraph to edit inline
-- Use the **edit button** for full document editing
-- Changes save automatically
-
-### Upload
-
-Click the upload button to add your own content:
-- **Single .md file** - One document
-- **ZIP archive** - Document with references (guides, examples, prompts)
-
-### Export
-
-Download any document or collection as a ZIP file for local use or sharing.
-
----
-
-## Getting Started
-
-**New to gitthub?** Here's the fastest path:
-
-1. **Browse the Hub** - Go to `/hub` and explore existing workflows
-2. **Try a Deploy workflow** - Pick something relevant to your work
-3. **Create your first skill** - Document something you explain to AI repeatedly
-4. **Upload and iterate** - Refine based on what works
-
----
-
-## FAQ
-
-### What's the difference between Skills and MCP?
-
-**Skills** are instructions that shape AI behavior (how it thinks, formats, analyzes). **MCP servers** are connections to external systems (what AI can access). A skill might tell AI how to format SQL queries; an MCP server actually runs them.
-
-### Can I use gitthub without Claude?
-
-gitthub content is plain markdown with structured frontmatter. While designed for Claude (especially Claude Code with skills), the workflows and instructions work with any AI assistant that can read markdown.
-
-### How do I contribute my workflows?
-
-Upload your content through the platform. Public templates are shared with all users. You can also export as ZIP and share directly.
-
-### What if I need to customize a template?
-
-All templates are editable. Copy to your account, modify as needed, and save your version. The original template remains unchanged.
-
----
-
-**Ready to start?** Head to the [Hub](/hub) to explore workflows, or press `Cmd+K` to search for something specific.
+**Now have a look at the getting started window in the navigation pane on the left. Jump right in if you finally wanna try it and click on step 2 to kick start!**
